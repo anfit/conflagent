@@ -1,0 +1,273 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Conflagent API",
+    "version": "2.0.0",
+    "description": "Minimal REST API for interacting with a single Confluence space and a root page. All requests must be authenticated with a pre-shared GPT secret using the 'X-GPT-Secret' header."
+  },
+  "servers": [
+    {
+      "url": "https://conflagent.someplace.eu",
+      "description": "Conflagent Endpoint"
+    }
+  ],
+  "paths": {
+    "/pages": {
+      "get": {
+        "summary": "List subpages of the root page",
+        "operationId": "listSubpages",
+        "security": [
+          {
+            "GPTSecret": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of subpages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Invalid GPT Secret"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a new child page under root",
+        "operationId": "createPage",
+        "security": [
+          {
+            "GPTSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Invalid GPT Secret"
+          },
+          "409": {
+            "description": "Conflict: Page already exists under root"
+          }
+        }
+      }
+    },
+    "/pages/{title}": {
+      "get": {
+        "summary": "Read content of a page by title (must be child of root)",
+        "operationId": "readPageByTitle",
+        "parameters": [
+          {
+            "name": "title",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "GPTSecret": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page content returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "title": {
+                      "type": "string"
+                    },
+                    "body": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Invalid GPT Secret"
+          },
+          "404": {
+            "description": "Not Found: Page not a child of root"
+          }
+        }
+      },
+      "put": {
+        "summary": "Update content of a page by title (must be child of root)",
+        "operationId": "updatePageByTitle",
+        "parameters": [
+          {
+            "name": "title",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "GPTSecret": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "body"
+                ],
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Invalid GPT Secret"
+          },
+          "404": {
+            "description": "Not Found: Page not a child of root"
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check (unauthenticated)",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "API is alive",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "Get OpenAPI schema",
+        "operationId": "getOpenAPISchema",
+        "responses": {
+          "200": {
+            "description": "OpenAPI JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "OpenAPI document",
+                  "properties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "GPTSecret": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-GPT-Secret"
+      }
+    },
+    "schemas": {}
+  }
+}

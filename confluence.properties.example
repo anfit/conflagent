@@ -1,0 +1,6 @@
+email=your_email@example.com
+api_token=your_confluence_api_token
+base_url=https://atlassian/wiki
+space_key=name-of-space
+root_page_id=1234
+gpt_shared_secret=some

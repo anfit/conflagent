@@ -1,0 +1,12 @@
+[Unit]
+Description=Conflagent Flask App (Gunicorn)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/projects/conflagent
+ExecStart=/home/ubuntu/projects/conflagent/venv/bin/gunicorn -w 4 -b 127.0.0.1:5000 conflagent:app
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
