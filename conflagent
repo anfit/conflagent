@@ -1,15 +1,15 @@
 server {
     listen 80;
-    server_name conflagent.foliole.eu;
+    server_name conflagent.someplace.eu;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name conflagent.foliole.eu;
+    server_name conflagent.someplace.eu;
 
-    ssl_certificate /etc/letsencrypt/live/conflagent.foliole.eu/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/conflagent.foliole.eu/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/conflagent.someplace.eu/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/conflagent.someplace.eu/privkey.pem;
 
     location / {
         proxy_pass http://127.0.0.1:5000;
