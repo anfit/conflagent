@@ -114,7 +114,7 @@ MIT License (or specify your desired license here)
 
 ## 🙌 Credits
 
-Developed by [Your Name or Organization].
+Developed by Jan Chimiak.
 
 ---
 
