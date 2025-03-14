@@ -136,7 +136,7 @@ sudo certbot renew --dry-run
 
 Visit:
 ```
-https://conflagent.someplace.eu/hello
+https://conflagent.someplace.eu/health
 ```
 
 You should see a JSON hello message if the server is working correctly.
