@@ -39,20 +39,62 @@ def build_headers():
         "Content-Type": "application/json"
     }
 
-def list_subpages():
-    url = f"{CONFIG['base_url']}/rest/api/content/{CONFIG['root_page_id']}/child/page"
+def get_page_by_title(title, parent_id):
+    url = f"{CONFIG['base_url']}/rest/api/content/{parent_id}/child/page"
     response = requests.get(url, headers=build_headers())
     if response.status_code != 200:
         abort(response.status_code, response.text)
     results = response.json().get("results", [])
-    return [{"id": r["id"], "title": r["title"]} for r in results]
-
-def find_child_page_by_title(title):
-    children = list_subpages()
-    for page in children:
+    for page in results:
         if page["title"] == title:
             return page
     return None
+
+def resolve_or_create_path(path):
+    parts = path.strip("/").split("/")
+    current_parent_id = CONFIG['root_page_id']
+    for part in parts:
+        existing = get_page_by_title(part, current_parent_id)
+        if existing:
+            current_parent_id = existing["id"]
+        else:
+            payload = {
+                "type": "page",
+                "title": part,
+                "ancestors": [{"id": current_parent_id}],
+                "space": {"key": CONFIG['space_key']},
+                "body": {"storage": {"value": "", "representation": "storage"}}
+            }
+            url = f"{CONFIG['base_url']}/rest/api/content"
+            response = requests.post(url, headers=build_headers(), json=payload)
+            if response.status_code != 200:
+                abort(response.status_code, response.text)
+            current_parent_id = response.json()["id"]
+    return current_parent_id
+
+def list_pages_recursive(parent_id, prefix=""):
+    url = f"{CONFIG['base_url']}/rest/api/content/{parent_id}/child/page"
+    response = requests.get(url, headers=build_headers())
+    if response.status_code != 200:
+        abort(response.status_code, response.text)
+    results = response.json().get("results", [])
+    paths = []
+    for page in results:
+        title = page["title"]
+        path = f"{prefix}/{title}" if prefix else title
+        paths.append(path)
+        paths.extend(list_pages_recursive(page["id"], path))
+    return paths
+
+def get_page_by_path(path):
+    parts = path.strip("/").split("/")
+    current_parent_id = CONFIG['root_page_id']
+    for part in parts:
+        page = get_page_by_title(part, current_parent_id)
+        if not page:
+            return None
+        current_parent_id = page["id"]
+    return page
 
 def get_page_body(page_id):
     url = f"{CONFIG['base_url']}/rest/api/content/{page_id}?expand=body.storage"
@@ -61,18 +103,20 @@ def get_page_body(page_id):
         abort(response.status_code, response.text)
     return response.json()["body"]["storage"]["value"]
 
-def create_page(title, body):
+def create_or_update_page(path, body):
+    parts = path.strip("/").split("/")
+    parent_path = "/".join(parts[:-1])
+    page_title = parts[-1]
+    parent_id = resolve_or_create_path(parent_path) if parent_path else CONFIG['root_page_id']
+    existing = get_page_by_title(page_title, parent_id)
+    if existing:
+        return update_page(existing, body)
     payload = {
         "type": "page",
-        "title": title,
-        "ancestors": [{"id": CONFIG['root_page_id']}],
+        "title": page_title,
+        "ancestors": [{"id": parent_id}],
         "space": {"key": CONFIG['space_key']},
-        "body": {
-            "storage": {
-                "value": body or "",
-                "representation": "storage"
-            }
-        }
+        "body": {"storage": {"value": body, "representation": "storage"}}
     }
     url = f"{CONFIG['base_url']}/rest/api/content"
     response = requests.post(url, headers=build_headers(), json=payload)
@@ -92,12 +136,7 @@ def update_page(page, new_body):
         "type": "page",
         "title": page["title"],
         "version": {"number": version},
-        "body": {
-            "storage": {
-                "value": new_body,
-                "representation": "storage"
-            }
-        }
+        "body": {"storage": {"value": new_body, "representation": "storage"}}
     }
     url = f"{CONFIG['base_url']}/rest/api/content/{page['id']}"
     response = requests.put(url, headers=build_headers(), json=payload)
@@ -110,14 +149,14 @@ def update_page(page, new_body):
 @app.route("/pages", methods=["GET"])
 def api_list_subpages():
     check_auth()
-    return jsonify(list_subpages())
+    return jsonify(list_pages_recursive(CONFIG['root_page_id']))
 
-@app.route("/pages/<string:title>", methods=["GET"])
+@app.route("/pages/<path:title>", methods=["GET"])
 def api_read_page(title):
     check_auth()
-    page = find_child_page_by_title(title)
+    page = get_page_by_path(title)
     if not page:
-        abort(404, description="Page not found or not a child of root")
+        abort(404, description="Page not found")
     content = get_page_body(page["id"])
     return jsonify({"title": title, "body": content})
 
@@ -129,18 +168,16 @@ def api_create_page():
     body = data.get("body", "")
     if not title:
         abort(400, description="Title is required")
-    if find_child_page_by_title(title):
-        abort(409, description="Page with this title already exists under root")
-    return jsonify(create_page(title, body))
+    return jsonify(create_or_update_page(title, body))
 
-@app.route("/pages/<string:title>", methods=["PUT"])
+@app.route("/pages/<path:title>", methods=["PUT"])
 def api_update_page(title):
     check_auth()
     data = request.get_json(force=True)
     new_body = data.get("body", "")
-    page = find_child_page_by_title(title)
+    page = get_page_by_path(title)
     if not page:
-        abort(404, description="Page not found or not a child of root")
+        abort(404, description="Page not found")
     return jsonify(update_page(page, new_body))
 
 @app.route("/openapi.json", methods=["GET"])
