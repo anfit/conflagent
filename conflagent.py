@@ -182,7 +182,7 @@ def api_update_page(title):
 
 @app.route("/openapi.json", methods=["GET"])
 def openapi_schema():
-    return send_file("openapi_conflagent.json", mimetype="application/json")
+    return send_file("openapi.json", mimetype="application/json")
 
 @app.route("/health", methods=["GET"])
 def api_health():
