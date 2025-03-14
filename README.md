@@ -29,7 +29,7 @@ This provides a clean way to expose a read/write Confluence sandbox to GPTs with
 ```
 conflagent/
 ├── conflagent.py                   # Flask application implementing the API
-├── openapi_conflagent.json        # OpenAPI 3.1 schema describing the API interface
+├── openapi_conflagent.json        # OpenAPI 3.1 schema describing the API interface (update servers.url before use)
 ├── confluence.properties.example  # Example configuration file
 ├── conflagent                     # Example Nginx site configuration (reverse proxy)
 ├── conflagent.service             # Systemd unit file for Gunicorn deployment
@@ -96,7 +96,7 @@ GPT tool calls must include this to access or modify Confluence content. The sec
 ## 🤖 GPT Integration Guide
 
 To integrate this API with a Custom GPT:
-1. Upload or import `openapi_conflagent.json` into the GPT tool definition.
+1. Upload or import `openapi_conflagent.json` into the GPT tool definition. **Before doing so, make sure you edit the file and replace the `servers.url` field (currently set to a placeholder) with the actual domain or IP address where your API is hosted.**
 2. Configure the `X-GPT-Secret` header in your GPT setup.
 3. Ensure the API server is reachable over HTTPS at the declared domain.
 4. Your GPT will now be able to list, read, create, and update pages within the sandboxed Confluence space.
@@ -114,7 +114,7 @@ MIT License (or specify your desired license here)
 
 ## 🙌 Credits
 
-Developed by Jan Chimiak.
+Developed by [Your Name or Organization].
 
 ---
 

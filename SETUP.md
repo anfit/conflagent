@@ -162,3 +162,5 @@ You should see a JSON hello message if the server is working correctly.
 
 After completing this guide, your Conflagent API server is fully deployed and secured for GPT integration.
 
+**📌 Note:** You must also update the `servers.url` field in `openapi_conflagent.json` to reflect your actual domain (e.g., `https://conflagent.yourdomain.com`) before uploading it to a GPT tool or client.
+
