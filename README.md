@@ -24,55 +24,38 @@ Designed to integrate with a **Custom GPT Operator Tool**, this API allows a GPT
 
 This provides a clean way to expose a read/write Confluence sandbox to GPTs without exposing the entire Confluence workspace or admin API tokens.
 
+## 🏗 Architecture Overview
+
+Conflagent follows a minimal architecture for simplicity and portability:
+
+```
+Client (Custom GPT / HTTP client)
+        │
+        ▼
+   [Nginx Reverse Proxy] ──▶ [Gunicorn WSGI Server] ──▶ [Flask App (conflagent.py)]
+                                      │
+                                      ▼
+                            [Confluence REST API]
+```
+
+Deployment is managed via Systemd and served through Nginx (HTTP/HTTPS). SSL certificates can be provisioned via Let's Encrypt.
+
 ## 📂 Project Structure
 
 ```
 conflagent/
-├── conflagent.py                   # Flask application implementing the API
-├── openapi_conflagent.json        # OpenAPI 3.1 schema describing the API interface (update servers.url before use)
-├── confluence.properties.example  # Example configuration file
-├── conflagent                     # Example Nginx site configuration (reverse proxy)
-├── conflagent.service             # Systemd unit file for Gunicorn deployment
+├── conflagent.py                    # Flask application implementing the API
+├── openapi_conflagent.json         # OpenAPI 3.1 schema describing the API interface (update servers.url before use)
+├── confluence.properties.example   # Example configuration file
+├── deployment/
+│   ├── conflagent.http             # Nginx config for initial HTTP deployment
+│   ├── conflagent.ssl              # Nginx config for HTTPS/SSL deployment
+│   └── conflagent.service          # Systemd unit file for Gunicorn deployment
 ```
 
-## 🛠 Setup
+## ⚙️ Setup & Deployment
 
-Basic setup instructions are included below. For more detailed deployment steps, refer to [SETUP.md](./SETUP.md).
-
-### 1. Install requirements
-```bash
-pip install flask requests gunicorn
-```
-
-### 2. Configure the application
-Copy the example config:
-```bash
-cp confluence.properties.example confluence.properties
-```
-
-Edit `confluence.properties` to match your environment:
-```
-email = your@email.com
-api_token = your_api_token_generated_at_id.atlassian.com
-base_url = https://your-domain.atlassian.net/wiki
-space_key = YOURSPACE
-root_page_id = 1234567890
-gpt_shared_secret = your_gpt_secret_key
-```
-
-### 3. Run the server
-Development mode:
-```bash
-python conflagent.py
-```
-
-Production mode via Gunicorn:
-```bash
-gunicorn -w 4 -b 127.0.0.1:8000 conflagent:app
-```
-
-### 4. HTTPS Deployment
-Use the provided Nginx configuration and a TLS certificate to expose the API securely. Detailed instructions in [SETUP.md](./SETUP.md).
+For full setup and deployment instructions, including HTTP → HTTPS transition, see: [SETUP.md](./SETUP.md)
 
 ## 🔐 Security Model
 
@@ -100,13 +83,6 @@ To integrate this API with a Custom GPT:
 2. Configure the `X-GPT-Secret` header in your GPT setup.
 3. Ensure the API server is reachable over HTTPS at the declared domain.
 4. Your GPT will now be able to list, read, create, and update pages within the sandboxed Confluence space.
-
-## 🚥 Deployment
-
-- **Nginx Reverse Proxy:** Configure using the included `conflagent` site file under `/etc/nginx/sites-available/`, then enable it with a symlink to `sites-enabled/`.
-- **Systemd Service:** Use `conflagent.service` to manage the Gunicorn process as a service.
-
-See [SETUP.md](./SETUP.md) for full deployment details.
 
 ## 📄 License
 
