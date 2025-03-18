@@ -1,14 +1,22 @@
-from flask import Flask, request, jsonify, abort, send_file
+from flask import Flask, request, jsonify, abort, send_file, g
 import requests
 import base64
 import os
+import json
+import copy
 
 app = Flask(__name__)
-CONFIG = {}
+CONFIG_CACHE = {}
 
-def load_config(path="conflagent.properties"):
+def load_config(endpoint_name):
+    if endpoint_name in CONFIG_CACHE:
+        return CONFIG_CACHE[endpoint_name]
+
+    path = f"conflagent.{endpoint_name}.properties"
     if not os.path.exists(path):
-        raise RuntimeError(f"Configuration file '{path}' not found.")
+        abort(404, description=f"Configuration for endpoint '{endpoint_name}' not found")
+
+    config = {}
     with open(path, "r") as f:
         for line in f:
             line = line.strip()
@@ -16,26 +24,33 @@ def load_config(path="conflagent.properties"):
                 continue
             key, sep, value = line.partition("=")
             if sep:
-                CONFIG[key.strip()] = value.strip()
+                config[key.strip()] = value.strip()
 
     required_keys = ["email", "api_token", "base_url", "space_key", "root_page_id", "gpt_shared_secret"]
     for key in required_keys:
-        if key not in CONFIG:
-            raise RuntimeError(f"Missing required config key: {key}")
+        if key not in config:
+            abort(500, description=f"Missing required config key '{key}' in {path}")
 
-# ❗️ Ensure config is loaded at Flask import time — NOT in __main__ block
-load_config()
+    CONFIG_CACHE[endpoint_name] = config
+    return config
+
+def with_config(f):
+    def wrapped(endpoint_name, *args, **kwargs):
+        g.config = load_config(endpoint_name)
+        return f(endpoint_name, *args, **kwargs)
+    wrapped.__name__ = f.__name__
+    return wrapped
 
 def check_auth():
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         abort(403, description="Forbidden: Missing or invalid Authorization header")
     token = auth_header.split("Bearer ")[-1].strip()
-    if token != CONFIG["gpt_shared_secret"]:
+    if token != g.config["gpt_shared_secret"]:
         abort(403, description="Forbidden: Invalid bearer token")
 
 def build_headers():
-    token = f"{CONFIG['email']}:{CONFIG['api_token']}"
+    token = f"{g.config['email']}:{g.config['api_token']}"
     token_bytes = base64.b64encode(token.encode()).decode()
     return {
         "Authorization": f"Basic {token_bytes}",
@@ -43,7 +58,7 @@ def build_headers():
     }
 
 def get_page_by_title(title, parent_id):
-    url = f"{CONFIG['base_url']}/rest/api/content/{parent_id}/child/page"
+    url = f"{g.config['base_url']}/rest/api/content/{parent_id}/child/page"
     response = requests.get(url, headers=build_headers())
     if response.status_code != 200:
         abort(response.status_code, response.text)
@@ -55,7 +70,7 @@ def get_page_by_title(title, parent_id):
 
 def resolve_or_create_path(path):
     parts = path.strip("/").split("/")
-    current_parent_id = CONFIG['root_page_id']
+    current_parent_id = g.config['root_page_id']
     for part in parts:
         existing = get_page_by_title(part, current_parent_id)
         if existing:
@@ -65,10 +80,10 @@ def resolve_or_create_path(path):
                 "type": "page",
                 "title": part,
                 "ancestors": [{"id": current_parent_id}],
-                "space": {"key": CONFIG['space_key']},
+                "space": {"key": g.config['space_key']},
                 "body": {"storage": {"value": "", "representation": "storage"}}
             }
-            url = f"{CONFIG['base_url']}/rest/api/content"
+            url = f"{g.config['base_url']}/rest/api/content"
             response = requests.post(url, headers=build_headers(), json=payload)
             if response.status_code != 200:
                 abort(response.status_code, response.text)
@@ -76,7 +91,7 @@ def resolve_or_create_path(path):
     return current_parent_id
 
 def list_pages_recursive(parent_id, prefix=""):
-    url = f"{CONFIG['base_url']}/rest/api/content/{parent_id}/child/page"
+    url = f"{g.config['base_url']}/rest/api/content/{parent_id}/child/page"
     response = requests.get(url, headers=build_headers())
     if response.status_code != 200:
         abort(response.status_code, response.text)
@@ -91,7 +106,7 @@ def list_pages_recursive(parent_id, prefix=""):
 
 def get_page_by_path(path):
     parts = path.strip("/").split("/")
-    current_parent_id = CONFIG['root_page_id']
+    current_parent_id = g.config['root_page_id']
     for part in parts:
         page = get_page_by_title(part, current_parent_id)
         if not page:
@@ -100,7 +115,7 @@ def get_page_by_path(path):
     return page
 
 def get_page_body(page_id):
-    url = f"{CONFIG['base_url']}/rest/api/content/{page_id}?expand=body.storage"
+    url = f"{g.config['base_url']}/rest/api/content/{page_id}?expand=body.storage"
     response = requests.get(url, headers=build_headers())
     if response.status_code != 200:
         abort(response.status_code, response.text)
@@ -110,7 +125,7 @@ def create_or_update_page(path, body):
     parts = path.strip("/").split("/")
     parent_path = "/".join(parts[:-1])
     page_title = parts[-1]
-    parent_id = resolve_or_create_path(parent_path) if parent_path else CONFIG['root_page_id']
+    parent_id = resolve_or_create_path(parent_path) if parent_path else g.config['root_page_id']
     existing = get_page_by_title(page_title, parent_id)
     if existing:
         return update_page(existing, body)
@@ -118,22 +133,21 @@ def create_or_update_page(path, body):
         "type": "page",
         "title": page_title,
         "ancestors": [{"id": parent_id}],
-        "space": {"key": CONFIG['space_key']},
+        "space": {"key": g.config['space_key']},
         "body": {"storage": {"value": body, "representation": "storage"}}
     }
-    url = f"{CONFIG['base_url']}/rest/api/content"
+    url = f"{g.config['base_url']}/rest/api/content"
     response = requests.post(url, headers=build_headers(), json=payload)
     if response.status_code != 200:
         abort(response.status_code, response.text)
     return {"message": "Page created", "id": response.json()["id"]}
 
 def update_page(page, new_body):
-    url = f"{CONFIG['base_url']}/rest/api/content/{page['id']}?expand=version"
+    url = f"{g.config['base_url']}/rest/api/content/{page['id']}?expand=version"
     response = requests.get(url, headers=build_headers())
     if response.status_code != 200:
         abort(response.status_code, response.text)
     version = response.json()["version"]["number"] + 1
-
     payload = {
         "id": page["id"],
         "type": "page",
@@ -141,7 +155,7 @@ def update_page(page, new_body):
         "version": {"number": version},
         "body": {"storage": {"value": new_body, "representation": "storage"}}
     }
-    url = f"{CONFIG['base_url']}/rest/api/content/{page['id']}"
+    url = f"{g.config['base_url']}/rest/api/content/{page['id']}"
     response = requests.put(url, headers=build_headers(), json=payload)
     if response.status_code != 200:
         abort(response.status_code, response.text)
@@ -149,13 +163,15 @@ def update_page(page, new_body):
 
 # === API Endpoints ===
 
-@app.route("/pages", methods=["GET"])
-def api_list_subpages():
+@app.route("/endpoint/<endpoint_name>/pages", methods=["GET"])
+@with_config
+def api_list_subpages(endpoint_name):
     check_auth()
-    return jsonify(list_pages_recursive(CONFIG['root_page_id']))
+    return jsonify(list_pages_recursive(g.config['root_page_id']))
 
-@app.route("/pages/<path:title>", methods=["GET"])
-def api_read_page(title):
+@app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["GET"])
+@with_config
+def api_read_page(endpoint_name, title):
     check_auth()
     page = get_page_by_path(title)
     if not page:
@@ -163,8 +179,9 @@ def api_read_page(title):
     content = get_page_body(page["id"])
     return jsonify({"title": title, "body": content})
 
-@app.route("/pages", methods=["POST"])
-def api_create_page():
+@app.route("/endpoint/<endpoint_name>/pages", methods=["POST"])
+@with_config
+def api_create_page(endpoint_name):
     check_auth()
     data = request.get_json(force=True)
     title = data.get("title")
@@ -173,8 +190,9 @@ def api_create_page():
         abort(400, description="Title is required")
     return jsonify(create_or_update_page(title, body))
 
-@app.route("/pages/<path:title>", methods=["PUT"])
-def api_update_page(title):
+@app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["PUT"])
+@with_config
+def api_update_page(endpoint_name, title):
     check_auth()
     data = request.get_json(force=True)
     new_body = data.get("body", "")
@@ -183,14 +201,25 @@ def api_update_page(title):
         abort(404, description="Page not found")
     return jsonify(update_page(page, new_body))
 
-@app.route("/openapi.json", methods=["GET"])
-def openapi_schema():
-    return send_file("openapi.json", mimetype="application/json")
+@app.route("/endpoint/<endpoint_name>/openapi.json", methods=["GET"])
+@with_config
+def openapi_schema(endpoint_name):
+    try:
+        with open("openapi.json", "r") as f:
+            template = json.load(f)
+    except Exception as e:
+        abort(500, description=f"Failed to load OpenAPI template: {e}")
 
-@app.route("/health", methods=["GET"])
-def api_health():
+    spec = copy.deepcopy(template)
+    host_url = request.host_url.rstrip("/")
+    spec["servers"] = [{"url": f"{host_url}/endpoint/{endpoint_name}", "description": "Endpoint-specific API"}]
+
+    return jsonify(spec)
+
+@app.route("/endpoint/<endpoint_name>/health", methods=["GET"])
+@with_config
+def api_health(endpoint_name):
     return jsonify({"status": "ok"})
 
 if __name__ == "__main__":
-    load_config()
     app.run(host="0.0.0.0", port=5000)

@@ -8,10 +8,11 @@
 ## ✨ Features
 
 - REST API secured via a pre-shared GPT secret (Bearer token via `Authorization: Bearer <token>` header)
-- Operations limited to a pre-defined Confluence space and root page
+- Supports **multiple independent endpoint instances**, each isolated under `/endpoint/<name>/` and configured via separate `conflagent.<name>.properties` files
+- Dynamic OpenAPI schema rendering per endpoint at `/endpoint/<name>/openapi.json`
+- Operations limited to a pre-defined Confluence space and root page per endpoint
 - Fully compatible with Custom GPTs via OpenAPI tool definition
 - Minimal, self-contained Flask app with no external database
-- OpenAPI schema served from `/openapi.json`
 - Systemd and Nginx deployment-ready
 
 ## 📚 Use Case
@@ -24,28 +25,24 @@ Designed to integrate with a **Custom GPT Operator Tool**, this API allows a GPT
 
 This provides a clean way to expose a read/write Confluence sandbox to GPTs without exposing the entire Confluence workspace or admin API tokens.
 
-## 🏗 Architecture Overview
+## 🔐 Multi-endpoint Architecture
 
-Conflagent follows a minimal architecture for simplicity and portability:
+Each GPT or user-specific configuration lives in its own file named `conflagent.<endpoint>.properties`. These endpoints are isolated and **treated as private secrets** — there is **no discovery API** for listing endpoints.
 
+The API structure for each endpoint is:
 ```
-Client (Custom GPT / HTTP client)
-        │
-        ▼
-   [Nginx Reverse Proxy] ──▶ [Gunicorn WSGI Server] ──▶ [Flask App (conflagent.py)]
-                                      │
-                                      ▼
-                            [Confluence REST API]
+/endpoint/<name>/pages
+/endpoint/<name>/pages/<title>
+/endpoint/<name>/openapi.json   ← dynamic OpenAPI schema
+/endpoint/<name>/health
 ```
-
-Deployment is managed via Systemd and served through Nginx (HTTP/HTTPS). SSL certificates can be provisioned via Let's Encrypt.
 
 ## 📂 Project Structure
 
 ```
 conflagent/
 ├── conflagent.py                    # Flask application implementing the API
-├── openapi_conflagent.json         # OpenAPI 3.1 schema describing the API interface (update servers.url before use)
+├── openapi_conflagent.json         # OpenAPI 3.1 schema template used per endpoint
 ├── conflagent.properties.example   # Example configuration file
 ├── deployment/
 │   ├── conflagent.http             # Nginx config for initial HTTP deployment
@@ -63,26 +60,26 @@ All protected operations require a pre-shared Bearer token header:
 ```
 Authorization: Bearer your_gpt_secret
 ```
-GPT tool calls must include this to access or modify Confluence content. The secret should be embedded in your Custom GPT configuration.
+GPT tool calls must include this to access or modify Confluence content. The secret should be embedded in your Custom GPT configuration. **Each endpoint has its own secret.**
 
-## 📘 API Endpoints (summary)
+## 📘 API Endpoints (summary for each `<endpoint>`)
 
-| Method | Path                | Description                              | Auth required |
-|--------|---------------------|------------------------------------------|----------------|
-| GET    | `/pages`            | List all subpages under the root         | ✅ Yes          |
-| GET    | `/pages/{title}`    | Read a page by title                     | ✅ Yes          |
-| POST   | `/pages`            | Create a new page under root             | ✅ Yes          |
-| PUT    | `/pages/{title}`    | Update a page by title                   | ✅ Yes          |
-| GET    | `/openapi.json`     | Get OpenAPI schema (for GPT integration) | ❌ No           |
-| GET    | `/health`           | Health check                             | ❌ No           |
+| Method | Path                                         | Description                              | Auth required |
+|--------|----------------------------------------------|------------------------------------------|----------------|
+| GET    | `/endpoint/<endpoint>/pages`                | List all subpages under the root         | ✅ Yes          |
+| GET    | `/endpoint/<endpoint>/pages/{title}`        | Read a page by title                     | ✅ Yes          |
+| POST   | `/endpoint/<endpoint>/pages`                | Create a new page under root             | ✅ Yes          |
+| PUT    | `/endpoint/<endpoint>/pages/{title}`        | Update a page by title                   | ✅ Yes          |
+| GET    | `/endpoint/<endpoint>/openapi.json`         | Dynamic OpenAPI schema for GPT tooling   | ❌ No           |
+| GET    | `/endpoint/<endpoint>/health`               | Health check                             | ❌ No           |
 
 ## 🤖 GPT Integration Guide
 
 To integrate this API with a Custom GPT:
-1. Upload or import `openapi_conflagent.json` into the GPT tool definition. **Before doing so, make sure you edit the file and replace the `servers.url` field (currently set to a placeholder) with the actual domain or IP address where your API is hosted.**
+1. Upload or import `openapi_conflagent.json` into the GPT tool definition. **No need to modify it — the dynamic endpoint renders the correct schema with injected base URL and paths.**
 2. Configure the `Authorization` header with `Bearer your_gpt_secret` in your GPT setup.
-3. Ensure the API server is reachable over HTTPS at the declared domain.
-4. Your GPT will now be able to list, read, create, and update pages within the sandboxed Confluence space.
+3. Ensure the API server is reachable over HTTPS at the declared domain and under the endpoint prefix you defined.
+4. Your GPT will now be able to list, read, create, and update pages within the sandboxed Confluence space for that endpoint.
 
 ## 📄 License
 

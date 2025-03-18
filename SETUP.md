@@ -132,22 +132,22 @@ sudo certbot renew --dry-run
 
 Check your endpoint:
 ```
-https://conflagent.someplace.eu/health
+https://conflagent.someplace.eu/endpoint/<your-endpoint>/health
 ```
 
 ---
 
 ## 📂 Additional Notes
 
-- Configuration is from `conflagent.properties` (see `conflagent.properties.example`)
-- API schema: `/openapi.json`
-- **Authentication is now done using a Bearer token in the `Authorization` header.** Example:
+- Each GPT endpoint is defined by a config file `conflagent.<endpoint>.properties`
+- API schema is available at `/endpoint/<endpoint>/openapi.json`
+- **Authentication is done using a Bearer token in the `Authorization` header.** Example:
 
 ```
 Authorization: Bearer your_gpt_secret
 ```
 
-- Keep your GPT token secure at all times
+- Keep your GPT token and endpoint name secure at all times — endpoint names are private and not discoverable via API
 
 ---
 
