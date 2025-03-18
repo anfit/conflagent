@@ -3,7 +3,7 @@
   "info": {
     "title": "Conflagent API",
     "version": "2.0.0",
-    "description": "Minimal REST API for interacting with a single Confluence space and a root page. All requests must be authenticated with a pre-shared GPT secret using the 'X-GPT-Secret' header."
+    "description": "Minimal REST API for interacting with a single Confluence space and a root page. All requests must be authenticated with a pre-shared GPT secret using the 'Authorization: Bearer <token>' header."
   },
   "servers": [
     {
@@ -18,7 +18,7 @@
         "operationId": "listSubpages",
         "security": [
           {
-            "GPTSecret": []
+            "BearerAuth": []
           }
         ],
         "responses": {
@@ -29,22 +29,14 @@
                 "schema": {
                   "type": "array",
                   "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "title": {
-                        "type": "string"
-                      }
-                    }
+                    "type": "string"
                   }
                 }
               }
             }
           },
           "403": {
-            "description": "Forbidden: Invalid GPT Secret"
+            "description": "Forbidden: Invalid token"
           }
         }
       },
@@ -53,7 +45,7 @@
         "operationId": "createPage",
         "security": [
           {
-            "GPTSecret": []
+            "BearerAuth": []
           }
         ],
         "requestBody": {
@@ -97,7 +89,7 @@
             }
           },
           "403": {
-            "description": "Forbidden: Invalid GPT Secret"
+            "description": "Forbidden: Invalid token"
           },
           "409": {
             "description": "Conflict: Page already exists under root"
@@ -121,7 +113,7 @@
         ],
         "security": [
           {
-            "GPTSecret": []
+            "BearerAuth": []
           }
         ],
         "responses": {
@@ -144,7 +136,7 @@
             }
           },
           "403": {
-            "description": "Forbidden: Invalid GPT Secret"
+            "description": "Forbidden: Invalid token"
           },
           "404": {
             "description": "Not Found: Page not a child of root"
@@ -166,7 +158,7 @@
         ],
         "security": [
           {
-            "GPTSecret": []
+            "BearerAuth": []
           }
         ],
         "requestBody": {
@@ -207,7 +199,7 @@
             }
           },
           "403": {
-            "description": "Forbidden: Invalid GPT Secret"
+            "description": "Forbidden: Invalid token"
           },
           "404": {
             "description": "Not Found: Page not a child of root"
@@ -250,7 +242,6 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "description": "OpenAPI document",
                   "properties": {}
                 }
               }
@@ -262,10 +253,10 @@
   },
   "components": {
     "securitySchemes": {
-      "GPTSecret": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "X-GPT-Secret"
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
       }
     },
     "schemas": {}

@@ -7,7 +7,7 @@
 
 ## ✨ Features
 
-- REST API secured via a pre-shared GPT secret (`X-GPT-Secret` header)
+- REST API secured via a pre-shared GPT secret (Bearer token via `Authorization: Bearer <token>` header)
 - Operations limited to a pre-defined Confluence space and root page
 - Fully compatible with Custom GPTs via OpenAPI tool definition
 - Minimal, self-contained Flask app with no external database
@@ -59,9 +59,9 @@ For full setup and deployment instructions, including HTTP → HTTPS transition,
 
 ## 🔐 Security Model
 
-All protected operations require a pre-shared secret header:
+All protected operations require a pre-shared Bearer token header:
 ```
-X-GPT-Secret: your_gpt_secret
+Authorization: Bearer your_gpt_secret
 ```
 GPT tool calls must include this to access or modify Confluence content. The secret should be embedded in your Custom GPT configuration.
 
@@ -80,7 +80,7 @@ GPT tool calls must include this to access or modify Confluence content. The sec
 
 To integrate this API with a Custom GPT:
 1. Upload or import `openapi_conflagent.json` into the GPT tool definition. **Before doing so, make sure you edit the file and replace the `servers.url` field (currently set to a placeholder) with the actual domain or IP address where your API is hosted.**
-2. Configure the `X-GPT-Secret` header in your GPT setup.
+2. Configure the `Authorization` header with `Bearer your_gpt_secret` in your GPT setup.
 3. Ensure the API server is reachable over HTTPS at the declared domain.
 4. Your GPT will now be able to list, read, create, and update pages within the sandboxed Confluence space.
 

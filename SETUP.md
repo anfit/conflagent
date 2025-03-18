@@ -92,13 +92,13 @@ Confirm that the site is publicly reachable before continuing to SSL setup.
 sudo apt install certbot python3-certbot-nginx -y
 ```
 
-## 🔒 6. Obtain SSL Certificate (Let's Encrypt)
+## 🔑 6. Obtain SSL Certificate (Let's Encrypt)
 
 ```bash
 sudo certbot --nginx -d conflagent.someplace.eu
 ```
 
-## 🆕 7. Switch to SSL Nginx Configuration
+## 🔁 7. Switch to SSL Nginx Configuration
 
 Replace the HTTP config with the SSL-enabled one:
 
@@ -141,6 +141,12 @@ https://conflagent.someplace.eu/health
 
 - Configuration is from `confluence.properties` (see `confluence.properties.example`)
 - API schema: `/openapi.json`
+- **Authentication is now done using a Bearer token in the `Authorization` header.** Example:
+
+```
+Authorization: Bearer your_gpt_secret
+```
+
 - Keep your GPT token secure at all times
 
 ---

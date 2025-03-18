@@ -27,9 +27,12 @@ def load_config(path="confluence.properties"):
 load_config()
 
 def check_auth():
-    secret = request.headers.get("X-GPT-Secret")
-    if not secret or secret != CONFIG["gpt_shared_secret"]:
-        abort(403, description="Forbidden: Invalid GPT shared secret")
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        abort(403, description="Forbidden: Missing or invalid Authorization header")
+    token = auth_header.split("Bearer ")[-1].strip()
+    if token != CONFIG["gpt_shared_secret"]:
+        abort(403, description="Forbidden: Invalid bearer token")
 
 def build_headers():
     token = f"{CONFIG['email']}:{CONFIG['api_token']}"
