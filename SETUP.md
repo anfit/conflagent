@@ -139,7 +139,7 @@ https://conflagent.someplace.eu/health
 
 ## 📂 Additional Notes
 
-- Configuration is from `confluence.properties` (see `confluence.properties.example`)
+- Configuration is from `conflagent.properties` (see `conflagent.properties.example`)
 - API schema: `/openapi.json`
 - **Authentication is now done using a Bearer token in the `Authorization` header.** Example:
 

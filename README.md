@@ -46,7 +46,7 @@ Deployment is managed via Systemd and served through Nginx (HTTP/HTTPS). SSL cer
 conflagent/
 ├── conflagent.py                    # Flask application implementing the API
 ├── openapi_conflagent.json         # OpenAPI 3.1 schema describing the API interface (update servers.url before use)
-├── confluence.properties.example   # Example configuration file
+├── conflagent.properties.example   # Example configuration file
 ├── deployment/
 │   ├── conflagent.http             # Nginx config for initial HTTP deployment
 │   ├── conflagent.ssl              # Nginx config for HTTPS/SSL deployment

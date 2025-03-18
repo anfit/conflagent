@@ -6,7 +6,7 @@ import os
 app = Flask(__name__)
 CONFIG = {}
 
-def load_config(path="confluence.properties"):
+def load_config(path="conflagent.properties"):
     if not os.path.exists(path):
         raise RuntimeError(f"Configuration file '{path}' not found.")
     with open(path, "r") as f:
