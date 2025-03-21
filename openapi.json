@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Conflagent API",
-    "version": "2.1.0",
-    "description": "REST API bridge between Custom GPTs and a sandboxed Confluence root page. All requests must be authenticated using a Bearer token (Authorization: Bearer <token>). API enables programmatic listing, reading, creation, and updating of Confluence pages under a pre-defined root page."
+    "version": "2.2.0",
+    "description": "REST API bridge between Custom GPTs and a sandboxed Confluence root page. All requests must be authenticated using a Bearer token (Authorization: Bearer <token>). API enables programmatic listing, reading, creation, updating, and renaming of Confluence pages under a pre-defined root page."
   },
   "servers": [
     {
@@ -199,6 +199,66 @@
                     },
                     "version": {
                       "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden: Invalid token"
+          },
+          "404": {
+            "description": "Not Found: Page not found or not a child of root"
+          }
+        }
+      }
+    },
+    "/pages/rename": {
+      "post": {
+        "summary": "Rename a page by title",
+        "description": "Renames a page by changing its title. The page must be a direct child of the configured root page. Title change is immediate and does not alter page hierarchy.",
+        "operationId": "renamePage",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "old_title",
+                  "new_title"
+                ],
+                "properties": {
+                  "old_title": {
+                    "type": "string"
+                  },
+                  "new_title": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Page renamed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "new_title": {
+                      "type": "string"
                     }
                   }
                 }

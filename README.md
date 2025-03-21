@@ -1,6 +1,6 @@
 # Conflagent – REST API Bridge to Confluence for Custom GPTs
 
-**Conflagent** is a lightweight, standalone REST API service that acts as a bridge between a custom GPT (or any other HTTP client) and a sandboxed section of an Atlassian Confluence workspace. It allows programmatic listing, creation, reading, and updating of Confluence pages, enabling GPT-based document automation, intelligent assistants, or bot integrations.
+**Conflagent** is a lightweight, standalone REST API service that acts as a bridge between a custom GPT (or any other HTTP client) and a sandboxed section of an Atlassian Confluence workspace. It allows programmatic listing, creation, reading, updating, and renaming of Confluence pages, enabling GPT-based document automation, intelligent assistants, or bot integrations.
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
@@ -22,6 +22,7 @@ Designed to integrate with a **Custom GPT Operator Tool**, this API allows a GPT
 - **Read** content of a child page by its title
 - **Create** a new child page under the root
 - **Update** an existing child page by title
+- **Rename** a child page by title
 
 > ⚠️ When updating pages, **submit full content only** – the API does **not support diffs or partial updates**.
 > Markdown input is accepted and will be automatically converted to Confluence HTML format.
@@ -37,6 +38,7 @@ The API structure for each endpoint is:
 ```
 /endpoint/<name>/pages
 /endpoint/<name>/pages/<title>
+/endpoint/<name>/pages/rename
 /endpoint/<name>/openapi.json   ← dynamic OpenAPI schema
 /endpoint/<name>/health
 ```
@@ -46,8 +48,9 @@ The API structure for each endpoint is:
 ```
 conflagent/
 ├── conflagent.py                    # Flask application implementing the API
-├── openapi_conflagent.json         # OpenAPI 3.1 schema template used per endpoint
+├── openapi.json                     # OpenAPI 3.1 schema template used per endpoint
 ├── conflagent.properties.example   # Example configuration file
+├── tests/                           # Test suite covering all endpoints
 ├── deployment/
 │   ├── conflagent.http             # Nginx config for initial HTTP deployment
 │   ├── conflagent.ssl              # Nginx config for HTTPS/SSL deployment
@@ -74,20 +77,21 @@ GPT tool calls must include this to access or modify Confluence content. The sec
 | GET    | `/endpoint/<endpoint>/pages/{title}`        | Read a page by title (returned as Confluence HTML)                              | ✅ Yes          |
 | POST   | `/endpoint/<endpoint>/pages`                | Create a new page under root. Accepts Markdown, auto-converted to Confluence.   | ✅ Yes          |
 | PUT    | `/endpoint/<endpoint>/pages/{title}`        | Update a page. Submit **full** content. Accepts Markdown input.                  | ✅ Yes          |
+| POST   | `/endpoint/<endpoint>/pages/rename`         | Rename a page from one title to another                                          | ✅ Yes          |
 | GET    | `/endpoint/<endpoint>/openapi.json`         | Dynamic OpenAPI schema for GPT tooling                                           | ❌ No           |
 | GET    | `/endpoint/<endpoint>/health`               | Health check                                                                     | ❌ No           |
 
 ## 🤖 GPT Integration Guide
 
 To integrate this API with a Custom GPT:
-1. Upload or import `openapi_conflagent.json` into the GPT tool definition. **No need to modify it — the dynamic endpoint renders the correct schema with injected base URL and paths.**
+1. Upload or import `openapi.json` into the GPT tool definition. **No need to modify it — the dynamic endpoint renders the correct schema with injected base URL and paths.**
 2. Configure the `Authorization` header with `Bearer your_gpt_secret` in your GPT setup.
 3. Ensure the API server is reachable over HTTPS at the declared domain and under the endpoint prefix you defined.
-4. Your GPT will now be able to list, read, create, and update pages within the sandboxed Confluence space for that endpoint.
+4. Your GPT will now be able to list, read, create, update, and rename pages within the sandboxed Confluence space for that endpoint.
 
 ## 📄 License
 
-MIT License (or specify your desired license here)
+MIT License
 
 ## 🙌 Credits
 

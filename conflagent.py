@@ -161,6 +161,29 @@ def update_page(page, new_body):
         abort(response.status_code, response.text)
     return {"message": "Page updated", "version": version}
 
+def rename_page(page, new_title):
+    url = f"{g.config['base_url']}/rest/api/content/{page['id']}?expand=version"
+    response = requests.get(url, headers=build_headers())
+    if response.status_code != 200:
+        abort(response.status_code, response.text)
+    version = response.json()["version"]["number"] + 1
+
+    body = get_page_body(page["id"])  # <- fetch body content here
+
+    payload = {
+        "id": page["id"],
+        "type": "page",
+        "title": new_title,
+        "version": {"number": version},
+        "body": {"storage": {"value": body, "representation": "storage"}}
+    }
+    url = f"{g.config['base_url']}/rest/api/content/{page['id']}"
+    response = requests.put(url, headers=build_headers(), json=payload)
+    if response.status_code != 200:
+        abort(response.status_code, response.text)
+    return {"message": "Page renamed", "version": version}
+
+
 # === API Endpoints ===
 
 @app.route("/endpoint/<endpoint_name>/pages", methods=["GET"])
@@ -200,6 +223,26 @@ def api_update_page(endpoint_name, title):
     if not page:
         abort(404, description="Page not found")
     return jsonify(update_page(page, new_body))
+
+@app.route('/endpoint/<endpoint_name>/pages/rename', methods=['POST'])
+@with_config
+def api_rename_page(endpoint_name):
+    check_auth()
+    data = request.get_json(force=True)
+    old_title = data.get("old_title")
+    new_title = data.get("new_title")
+
+    if not old_title or not new_title:
+        abort(400, description="Both 'old_title' and 'new_title' are required.")
+
+    page = get_page_by_path(old_title)
+    if not page:
+        abort(404, description="Page not found")
+
+    result = rename_page(page, new_title)
+    result["new_title"] = new_title  # Ensure consistency for test expectations
+    return jsonify(result)
+
 
 @app.route("/endpoint/<endpoint_name>/openapi.json", methods=["GET"])
 @with_config

@@ -60,6 +60,16 @@ def test_update_page(mock_update, mock_get_page, mock_load_config, client):
     assert response.get_json() == {"message": "Page updated", "version": 2}
 
 @patch("conflagent.load_config", return_value=mock_config)
+@patch("conflagent.get_page_by_path")
+@patch("conflagent.rename_page")
+def test_rename_page(mock_rename, mock_get_page, mock_load_config, client):
+    mock_get_page.return_value = {"id": "111", "title": "old/page"}
+    mock_rename.return_value = {"message": "Page renamed", "new_title": "new/page"}
+    response = client.post(f"/endpoint/{endpoint}/pages/rename", json={"old_title": "old/page", "new_title": "new/page"}, headers=headers)
+    assert response.status_code == 200
+    assert response.get_json() == {"message": "Page renamed", "new_title": "new/page"}
+
+@patch("conflagent.load_config", return_value=mock_config)
 def test_health(mock_load_config, client):
     response = client.get(f"/endpoint/{endpoint}/health")
     assert response.status_code == 200
