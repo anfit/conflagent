@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Conflagent API",
-    "version": "2.0.0",
-    "description": "Minimal REST API for interacting with a single Confluence space and a root page. All requests must be authenticated with a pre-shared GPT secret using the 'Authorization: Bearer <token>' header."
+    "version": "2.1.0",
+    "description": "REST API bridge between Custom GPTs and a sandboxed Confluence root page. All requests must be authenticated using a Bearer token (Authorization: Bearer <token>). API enables programmatic listing, reading, creation, and updating of Confluence pages under a pre-defined root page."
   },
   "servers": [
     {
@@ -15,6 +15,7 @@
     "/pages": {
       "get": {
         "summary": "List subpages of the root page",
+        "description": "Returns the titles of all pages that are direct children of the configured root page in the Confluence space.",
         "operationId": "listSubpages",
         "security": [
           {
@@ -42,6 +43,7 @@
       },
       "post": {
         "summary": "Create a new child page under root",
+        "description": "Creates a new Confluence page as a direct child of the configured root page. Title must be unique under the root. Body may contain Markdown — it will be converted to Confluence storage format automatically.",
         "operationId": "createPage",
         "security": [
           {
@@ -62,7 +64,8 @@
                     "type": "string"
                   },
                   "body": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Optional Markdown body — will be converted to Confluence HTML format."
                   }
                 }
               }
@@ -92,14 +95,15 @@
             "description": "Forbidden: Invalid token"
           },
           "409": {
-            "description": "Conflict: Page already exists under root"
+            "description": "Conflict: Page with this title already exists under root"
           }
         }
       }
     },
     "/pages/{title}": {
       "get": {
-        "summary": "Read content of a page by title (must be child of root)",
+        "summary": "Read content of a page by title",
+        "description": "Returns the content of a Confluence page identified by title (must be a direct child of root). Content is returned in Confluence storage format (HTML-like XML). When reading content, be careful not to mangle internal page links in subsequent updates.",
         "operationId": "readPageByTitle",
         "parameters": [
           {
@@ -128,7 +132,8 @@
                       "type": "string"
                     },
                     "body": {
-                      "type": "string"
+                      "type": "string",
+                      "description": "Content in Confluence storage format (HTML-like XML)."
                     }
                   }
                 }
@@ -139,12 +144,13 @@
             "description": "Forbidden: Invalid token"
           },
           "404": {
-            "description": "Not Found: Page not a child of root"
+            "description": "Not Found: Page not found or not a child of root"
           }
         }
       },
       "put": {
-        "summary": "Update content of a page by title (must be child of root)",
+        "summary": "Update content of a page by title",
+        "description": "Updates the full content of a Confluence page identified by title. Only pages under the configured root are updatable. Markdown input is accepted and will be converted on the fly to Confluence storage format (HTML/XML). ⚠️ Full body content must be submitted — partial/diff updates are not supported.",
         "operationId": "updatePageByTitle",
         "parameters": [
           {
@@ -172,7 +178,8 @@
                 ],
                 "properties": {
                   "body": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Markdown content to be converted to Confluence HTML. Submit full content only — diffs/patches are not supported."
                   }
                 }
               }
@@ -202,18 +209,19 @@
             "description": "Forbidden: Invalid token"
           },
           "404": {
-            "description": "Not Found: Page not a child of root"
+            "description": "Not Found: Page not found or not a child of root"
           }
         }
       }
     },
     "/health": {
       "get": {
-        "summary": "Health check (unauthenticated)",
+        "summary": "Health check",
+        "description": "Check whether API server is live. No authentication required.",
         "operationId": "healthCheck",
         "responses": {
           "200": {
-            "description": "API is alive",
+            "description": "Server is running",
             "content": {
               "application/json": {
                 "schema": {
@@ -234,10 +242,11 @@
     "/openapi.json": {
       "get": {
         "summary": "Get OpenAPI schema",
+        "description": "Returns this OpenAPI schema document.",
         "operationId": "getOpenAPISchema",
         "responses": {
           "200": {
-            "description": "OpenAPI JSON",
+            "description": "OpenAPI JSON returned",
             "content": {
               "application/json": {
                 "schema": {

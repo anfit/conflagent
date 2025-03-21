@@ -23,6 +23,10 @@ Designed to integrate with a **Custom GPT Operator Tool**, this API allows a GPT
 - **Create** a new child page under the root
 - **Update** an existing child page by title
 
+> ⚠️ When updating pages, **submit full content only** – the API does **not support diffs or partial updates**.
+> Markdown input is accepted and will be automatically converted to Confluence HTML format.
+> Take care **not to mangle internal page links** during updates.
+
 This provides a clean way to expose a read/write Confluence sandbox to GPTs without exposing the entire Confluence workspace or admin API tokens.
 
 ## 🔐 Multi-endpoint Architecture
@@ -62,16 +66,16 @@ Authorization: Bearer your_gpt_secret
 ```
 GPT tool calls must include this to access or modify Confluence content. The secret should be embedded in your Custom GPT configuration. **Each endpoint has its own secret.**
 
-## 📘 API Endpoints (summary for each `<endpoint>`)
+## 📖 API Endpoints (summary for each `<endpoint>`)
 
-| Method | Path                                         | Description                              | Auth required |
-|--------|----------------------------------------------|------------------------------------------|----------------|
-| GET    | `/endpoint/<endpoint>/pages`                | List all subpages under the root         | ✅ Yes          |
-| GET    | `/endpoint/<endpoint>/pages/{title}`        | Read a page by title                     | ✅ Yes          |
-| POST   | `/endpoint/<endpoint>/pages`                | Create a new page under root             | ✅ Yes          |
-| PUT    | `/endpoint/<endpoint>/pages/{title}`        | Update a page by title                   | ✅ Yes          |
-| GET    | `/endpoint/<endpoint>/openapi.json`         | Dynamic OpenAPI schema for GPT tooling   | ❌ No           |
-| GET    | `/endpoint/<endpoint>/health`               | Health check                             | ❌ No           |
+| Method | Path                                         | Description                                                                      | Auth required |
+|--------|----------------------------------------------|----------------------------------------------------------------------------------|----------------|
+| GET    | `/endpoint/<endpoint>/pages`                | List all subpages under the root                                                 | ✅ Yes          |
+| GET    | `/endpoint/<endpoint>/pages/{title}`        | Read a page by title (returned as Confluence HTML)                              | ✅ Yes          |
+| POST   | `/endpoint/<endpoint>/pages`                | Create a new page under root. Accepts Markdown, auto-converted to Confluence.   | ✅ Yes          |
+| PUT    | `/endpoint/<endpoint>/pages/{title}`        | Update a page. Submit **full** content. Accepts Markdown input.                  | ✅ Yes          |
+| GET    | `/endpoint/<endpoint>/openapi.json`         | Dynamic OpenAPI schema for GPT tooling                                           | ❌ No           |
+| GET    | `/endpoint/<endpoint>/health`               | Health check                                                                     | ❌ No           |
 
 ## 🤖 GPT Integration Guide
 
