@@ -5,7 +5,7 @@ from flask import g
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from conflagent import resolve_or_create_path, update_page, app
+from conflagent import resolve_or_create_path, update_page, rename_page, app
 
 mock_config = {
     "gpt_shared_secret": "testsecret",
@@ -58,3 +58,28 @@ def test_update_page(mock_get, mock_put, mock_headers):
         page = {"id": "999", "title": "TestPage"}
         result = update_page(page, "Updated body")
         assert result == {"message": "Page updated", "version": 2}
+
+@patch("conflagent.get_page_body")
+@patch("conflagent.build_headers")
+@patch("conflagent.requests.put")
+@patch("conflagent.requests.get")
+def test_rename_page_helper(mock_get, mock_put, mock_headers, mock_get_body):
+    with app.test_request_context():
+        g.config = mock_config
+        mock_headers.return_value = {"Authorization": "Basic dummy"}
+
+        mock_get_body.return_value = "Existing body"
+
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+        mock_get_response.json.return_value = {"version": {"number": 1}}
+        mock_get.return_value = mock_get_response
+
+        mock_put_response = MagicMock()
+        mock_put_response.status_code = 200
+        mock_put.return_value = mock_put_response
+
+        page = {"id": "999", "title": "Old Title"}
+        result = rename_page(page, "New Title")
+        assert result == {"message": "Page renamed", "version": 2, "new_title": "New Title"}
+

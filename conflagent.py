@@ -181,7 +181,7 @@ def rename_page(page, new_title):
     response = requests.put(url, headers=build_headers(), json=payload)
     if response.status_code != 200:
         abort(response.status_code, response.text)
-    return {"message": "Page renamed", "version": version}
+    return {"message": "Page renamed", "version": version, "new_title": new_title}
 
 
 # === API Endpoints ===
@@ -240,7 +240,6 @@ def api_rename_page(endpoint_name):
         abort(404, description="Page not found")
 
     result = rename_page(page, new_title)
-    result["new_title"] = new_title  # Ensure consistency for test expectations
     return jsonify(result)
 
 
