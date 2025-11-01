@@ -41,6 +41,14 @@ def test_read_page(mock_get_body, mock_get_page, mock_load_config, client):
     assert response.status_code == 200
     assert response.get_json() == {"title": "some/page", "body": "Test content"}
 
+
+@patch("conflagent.load_config", return_value=mock_config)
+@patch("conflagent.get_page_by_path")
+def test_read_page_missing(mock_get_page, mock_load_config, client):
+    mock_get_page.return_value = None
+    response = client.get(f"/endpoint/{endpoint}/pages/missing", headers=headers)
+    assert response.status_code == 404
+
 @patch("conflagent.load_config", return_value=mock_config)
 @patch("conflagent.create_or_update_page")
 def test_create_page(mock_create, mock_load_config, client):
@@ -48,6 +56,16 @@ def test_create_page(mock_create, mock_load_config, client):
     response = client.post(f"/endpoint/{endpoint}/pages", json={"title": "some/page", "body": "new content"}, headers=headers)
     assert response.status_code == 200
     assert response.get_json() == {"message": "Page created", "id": "456"}
+
+
+@patch("conflagent.load_config", return_value=mock_config)
+def test_create_page_requires_title(mock_load_config, client):
+    response = client.post(
+        f"/endpoint/{endpoint}/pages",
+        json={"body": "content"},
+        headers=headers,
+    )
+    assert response.status_code == 400
 
 @patch("conflagent.load_config", return_value=mock_config)
 @patch("conflagent.get_page_by_path")
@@ -59,6 +77,18 @@ def test_update_page(mock_update, mock_get_page, mock_load_config, client):
     assert response.status_code == 200
     assert response.get_json() == {"message": "Page updated", "version": 2}
 
+
+@patch("conflagent.load_config", return_value=mock_config)
+@patch("conflagent.get_page_by_path")
+def test_update_page_missing(mock_get_page, mock_load_config, client):
+    mock_get_page.return_value = None
+    response = client.put(
+        f"/endpoint/{endpoint}/pages/missing",
+        json={"body": "updated"},
+        headers=headers,
+    )
+    assert response.status_code == 404
+
 @patch("conflagent.load_config", return_value=mock_config)
 @patch("conflagent.get_page_by_path")
 @patch("conflagent.rename_page")
@@ -68,6 +98,28 @@ def test_rename_page(mock_rename, mock_get_page, mock_load_config, client):
     response = client.post(f"/endpoint/{endpoint}/pages/rename", json={"old_title": "old/page", "new_title": "new/page"}, headers=headers)
     assert response.status_code == 200
     assert response.get_json() == {"message": "Page renamed", "new_title": "new/page"}
+
+
+@patch("conflagent.load_config", return_value=mock_config)
+def test_rename_page_requires_fields(mock_load_config, client):
+    response = client.post(
+        f"/endpoint/{endpoint}/pages/rename",
+        json={"old_title": "only-old"},
+        headers=headers,
+    )
+    assert response.status_code == 400
+
+
+@patch("conflagent.load_config", return_value=mock_config)
+@patch("conflagent.get_page_by_path")
+def test_rename_page_missing_source(mock_get_page, mock_load_config, client):
+    mock_get_page.return_value = None
+    response = client.post(
+        f"/endpoint/{endpoint}/pages/rename",
+        json={"old_title": "missing", "new_title": "new"},
+        headers=headers,
+    )
+    assert response.status_code == 404
 
 @patch("conflagent.load_config", return_value=mock_config)
 def test_health(mock_load_config, client):
