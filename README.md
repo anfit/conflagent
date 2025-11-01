@@ -55,7 +55,22 @@ conflagent/
 
 ## ⚙️ Setup & Deployment
 
-Setup is not handled by this repository. To work, this needs to be hosted over SSL.
+This repository contains only the Conflagent service code. The automation that builds
+and ships the application lives in a separate, private deployment repository. In
+practice this means:
+
+- **Three permanent environments** – `main` deploys to the dev instance, `staging`
+  to the stage instance for manual verification, and `prod` to the production
+  instance that must remain stable.
+- **Trunk-based development** – feature work branches off `main`, is merged via
+  small, continuously integrated changes, and then flows through staging to
+  production.
+- **Environment-specific logic** – infrastructure templates, secrets management,
+  and any pipeline-specific scripts are managed outside of this repo. Coordinate
+  with the deployment repository for changes to those assets.
+
+Regardless of environment, Conflagent must be hosted behind HTTPS to keep GPT
+secrets and Confluence tokens protected in transit.
 
 ## 🔐 Security Model
 
