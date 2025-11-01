@@ -12,7 +12,7 @@ def load_config(endpoint_name):
     if endpoint_name in CONFIG_CACHE:
         return CONFIG_CACHE[endpoint_name]
 
-    path = f"conflagent.{endpoint_name}.properties"
+    path = f"../conflagent.{endpoint_name}.properties"
     if not os.path.exists(path):
         abort(404, description=f"Configuration for endpoint '{endpoint_name}' not found")
 
