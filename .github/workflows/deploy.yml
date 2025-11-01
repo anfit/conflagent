@@ -52,8 +52,14 @@ jobs:
         run: |
           echo "📤 Syncing to ${{ steps.env.outputs.env }} environment..."
           rsync -az --delete \
+            --exclude '*.md' \
+            --exclude '*.example' \
             --exclude '.git' \
             --exclude '.github' \
+            --exclude '.gitignore' \
+            --exclude '.idea' \
+            --exclude 'tests' \
+            --exclude 'pytest.ini' \
             ./ \
             ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/
 

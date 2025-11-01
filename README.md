@@ -13,7 +13,6 @@
 - Operations limited to a pre-defined Confluence space and root page per endpoint
 - Fully compatible with Custom GPTs via OpenAPI tool definition
 - Minimal, self-contained Flask app with no external database
-- Systemd and Nginx deployment-ready
 
 ## 📚 Use Case
 
@@ -42,24 +41,21 @@ The API structure for each endpoint is:
 /endpoint/<name>/openapi.json   ← dynamic OpenAPI schema
 /endpoint/<name>/health
 ```
+It should be placed *outside* deployment folder.
 
 ## 📂 Project Structure
 
 ```
 conflagent/
 ├── conflagent.py                    # Flask application implementing the API
+├── conflagent.properties.example    # Example configuration file
 ├── openapi.json                     # OpenAPI 3.1 schema template used per endpoint
-├── conflagent.properties.example   # Example configuration file
 ├── tests/                           # Test suite covering all endpoints
-├── deployment/
-│   ├── conflagent.http             # Nginx config for initial HTTP deployment
-│   ├── conflagent.ssl              # Nginx config for HTTPS/SSL deployment
-│   └── conflagent.service          # Systemd unit file for Gunicorn deployment
 ```
 
 ## ⚙️ Setup & Deployment
 
-For full setup and deployment instructions, including HTTP → HTTPS transition, see: [SETUP.md](./SETUP.md)
+Setup is not handled by this repository. To work, this needs to be hosted over SSL.
 
 ## 🔐 Security Model
 
