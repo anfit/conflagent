@@ -1,0 +1,71 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+      - prod
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Determine deployment target
+        id: env
+        run: |
+          BRANCH="${GITHUB_REF##*/}"
+          case "$BRANCH" in
+            main)
+              ENV_NAME="dev"
+              ;;
+            staging)
+              ENV_NAME="stage"
+              ;;
+            prod)
+              ENV_NAME="production"
+              ;;
+            *)
+              echo "❌ Unknown branch: $BRANCH"
+              exit 1
+              ;;
+          esac
+          echo "env=${ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "✅ Will deploy branch '$BRANCH' → environment '$ENV_NAME'"
+
+      - name: Add known host
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_HOST }} ssh-ed25519 ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}" >> ~/.ssh/known_hosts
+
+      - name: Sync repository to server
+        run: |
+          echo "📤 Syncing to ${{ steps.env.outputs.env }} environment..."
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            ./ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/
+
+      - name: Install Python dependencies on server
+        run: |
+          echo "📦 Installing dependencies in venv for ${{ steps.env.outputs.env }} ..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "\
+            source /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/venv/bin/activate && \
+            pip install -r /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/requirements.txt"
+
+      - name: Restart remote service
+        run: |
+          echo "♻️ Restarting remote service..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "~/restart-env.sh ${{ steps.env.outputs.env }}"
