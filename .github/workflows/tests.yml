@@ -8,9 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       run_integration:
-        description: 'Set to true to force integration tests on this branch'
+        description: 'Toggle to run integration tests on this branch'
         required: false
-        default: 'false'
+        default: false
+        type: boolean
   schedule:
     - cron: '0 2 * * *'
 
@@ -44,8 +45,8 @@ jobs:
     if: |
       github.event_name != 'pull_request' &&
       (
-        github.ref_name == 'main' ||
-        github.ref_name == 'staging' ||
+        startsWith(github.ref, 'refs/heads/main') ||
+        startsWith(github.ref, 'refs/heads/staging') ||
         github.event_name == 'schedule' ||
         (github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration == 'true')
       )
