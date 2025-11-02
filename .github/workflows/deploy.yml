@@ -8,6 +8,11 @@ on:
       - prod
   pull_request:
   workflow_dispatch:
+    inputs:
+      run_integration:
+        description: 'Set to true to force integration tests on this branch'
+        required: false
+        default: 'false'
   schedule:
     - cron: '0 2 * * *'
 
@@ -40,7 +45,11 @@ jobs:
     needs: tests
     if: |
       github.event_name != 'pull_request' &&
-      (github.ref_name == 'main' || github.ref_name == 'staging')
+      (
+        github.ref_name == 'main' ||
+        github.ref_name == 'staging' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration == 'true')
+      )
 
     env:
       CONFLAGENT_DEV_URL: ${{ secrets.CONFLAGENT_DEV_URL }}
@@ -117,7 +126,8 @@ jobs:
       - integration-tests
     if: |
       github.event_name != 'pull_request' &&
-      (needs.integration-tests.result == 'success' || needs.integration-tests.result == 'skipped')
+      (needs.integration-tests.result == 'success' || needs.integration-tests.result == 'skipped') &&
+      (github.ref_name == 'main' || github.ref_name == 'staging' || github.ref_name == 'prod')
 
     steps:
       - name: Checkout repository
