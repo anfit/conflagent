@@ -7,7 +7,7 @@ from flask import Flask, abort, g, jsonify, request
 from conflagent_core.auth import check_auth
 from conflagent_core.config import with_config
 from conflagent_core.confluence import ConfluenceClient
-from conflagent_core.openapi import generate_openapi_spec
+from conflagent_core.openapi import document_operation, generate_openapi_spec
 
 
 app = Flask(__name__)
@@ -19,6 +19,7 @@ def _get_client() -> ConfluenceClient:
 
 @app.route("/endpoint/<endpoint_name>/pages", methods=["GET"])
 @with_config
+@document_operation("/pages", "get")
 def api_list_subpages(endpoint_name: str):  # pragma: no cover - exercised via tests
     check_auth()
     client = _get_client()
@@ -27,6 +28,7 @@ def api_list_subpages(endpoint_name: str):  # pragma: no cover - exercised via t
 
 @app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["GET"])
 @with_config
+@document_operation("/pages/{title}", "get")
 def api_read_page(endpoint_name: str, title: str):
     check_auth()
     client = _get_client()
@@ -40,6 +42,7 @@ def api_read_page(endpoint_name: str, title: str):
 
 @app.route("/endpoint/<endpoint_name>/pages", methods=["POST"])
 @with_config
+@document_operation("/pages", "post")
 def api_create_page(endpoint_name: str):
     check_auth()
     data = request.get_json(force=True)
@@ -54,6 +57,7 @@ def api_create_page(endpoint_name: str):
 
 @app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["PUT"])
 @with_config
+@document_operation("/pages/{title}", "put")
 def api_update_page(endpoint_name: str, title: str):
     check_auth()
     data = request.get_json(force=True)
@@ -69,6 +73,7 @@ def api_update_page(endpoint_name: str, title: str):
 
 @app.route("/endpoint/<endpoint_name>/pages/rename", methods=["POST"])
 @with_config
+@document_operation("/pages/rename", "post")
 def api_rename_page(endpoint_name: str):
     check_auth()
     data = request.get_json(force=True)
@@ -90,13 +95,15 @@ def api_rename_page(endpoint_name: str):
 
 @app.route("/endpoint/<endpoint_name>/openapi.json", methods=["GET"])
 @with_config
+@document_operation("/openapi.json", "get")
 def openapi_schema(endpoint_name: str):
-    spec = generate_openapi_spec(endpoint_name, request.host_url)
+    spec = generate_openapi_spec(endpoint_name, request.host_url, app)
     return jsonify(spec)
 
 
 @app.route("/endpoint/<endpoint_name>/health", methods=["GET"])
 @with_config
+@document_operation("/health", "get")
 def api_health(endpoint_name: str):
     return jsonify({"status": "ok"})
 
