@@ -46,6 +46,8 @@ def test_health_endpoint_reports_ok(dev_config: Dict[str, str]):
         timeout=10,
     )
     assert response.status_code == 200
+    content_type = response.headers.get("Content-Type", "")
+    assert "application/json" in content_type
     payload = response.json()
     assert payload == {"status": "ok"}
 
