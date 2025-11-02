@@ -92,7 +92,6 @@ def generate_openapi_spec(
     endpoint_name: str,
     host_url: str,
     flask_app: Flask,
-    template_path: str = "openapi.json",
 ) -> Dict[str, Any]:
     """Generate a customised OpenAPI specification for an endpoint."""
 

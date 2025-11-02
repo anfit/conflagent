@@ -50,7 +50,6 @@ conflagent/
 ├── conflagent.py                    # Flask routing entry point with lightweight handlers
 ├── conflagent_core/                 # Core services for config, auth, OpenAPI, and Confluence access
 ├── conflagent.properties.example    # Example configuration file
-├── openapi.json                     # OpenAPI 3.1 schema template used per endpoint
 ├── tests/                           # Unit and integration tests covering routes and services
 ```
 
@@ -96,7 +95,7 @@ GPT tool calls must include this to access or modify Confluence content. The sec
 ## 🤖 GPT Integration Guide
 
 To integrate this API with a Custom GPT:
-1. Upload or import `openapi.json` into the GPT tool definition. **No need to modify it — the dynamic endpoint renders the correct schema with injected base URL and paths.**
+1. Download the OpenAPI schema from your running deployment at `https://<host>/endpoint/<name>/openapi.json` and provide it to the GPT tool definition. The schema is generated dynamically with the correct server URL and operations for that endpoint.
 2. Configure the `Authorization` header with `Bearer your_gpt_secret` in your GPT setup.
 3. Ensure the API server is reachable over HTTPS at the declared domain and under the endpoint prefix you defined.
 4. Your GPT will now be able to list, read, create, update, and rename pages within the sandboxed Confluence space for that endpoint.

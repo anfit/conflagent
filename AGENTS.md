@@ -20,7 +20,7 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 - Avoid introducing new dependencies unless absolutely necessary; prefer the standard library or packages already listed in `requirements.txt`.
 
 ## OpenAPI & Configuration
-- If modifying the API contract, update `openapi.json` and ensure tests cover the new schema expectations.
+- If modifying the API contract, update the OpenAPI decorators and ensure tests cover the schema expectations.
 - Configuration files such as `conflagent.<endpoint>.properties` are treated as secrets; never commit real credentials.
 
 ## Documentation & Miscellaneous
