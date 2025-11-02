@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict
+import copy
+from typing import Any, Callable, Dict
 
 from apispec import APISpec
-from flask import abort
+from flask import Flask, abort
 
 _API_DESCRIPTION = (
     "REST API bridge between Custom GPTs and a sandboxed Confluence root page. "
@@ -261,7 +262,49 @@ _PATH_DEFINITIONS: Dict[str, Dict[str, Any]] = {
 }
 
 
-def _build_spec() -> APISpec:
+def document_operation(path: str, method: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Attach an OpenAPI definition to a Flask view function."""
+
+    normalised_method = method.lower()
+    if path not in _PATH_DEFINITIONS or normalised_method not in _PATH_DEFINITIONS[path]:
+        raise KeyError(f"Unknown OpenAPI definition for {method.upper()} {path}")
+
+    definition = copy.deepcopy(_PATH_DEFINITIONS[path][normalised_method])
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        docs: Dict[str, Dict[str, Any]] = getattr(func, "__openapi__", {})
+        path_docs = docs.setdefault(path, {})
+        if normalised_method in path_docs:
+            raise ValueError(
+                f"Duplicate OpenAPI definition for {method.upper()} {path} on {func.__name__}"
+            )
+        path_docs[normalised_method] = definition
+        setattr(func, "__openapi__", docs)
+        return func
+
+    return decorator
+
+
+def _collect_documented_paths(flask_app: Flask) -> Dict[str, Dict[str, Any]]:
+    """Gather OpenAPI metadata from documented Flask view functions."""
+
+    documented_paths: Dict[str, Dict[str, Any]] = {}
+    for view_func in flask_app.view_functions.values():
+        view_docs = getattr(view_func, "__openapi__", None)
+        if not view_docs:
+            continue
+        for path, operations in view_docs.items():
+            merged_operations = documented_paths.setdefault(path, {})
+            for method, details in operations.items():
+                if method in merged_operations and merged_operations[method] != details:
+                    raise ValueError(
+                        f"Conflicting OpenAPI definitions for {method.upper()} {path}"
+                    )
+                merged_operations[method] = copy.deepcopy(details)
+    return documented_paths
+
+
+def _build_spec(flask_app: Flask) -> APISpec:
     spec = APISpec(
         title="Conflagent API",
         version="2.2.0",
@@ -274,19 +317,22 @@ def _build_spec() -> APISpec:
         {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"},
     )
 
-    for path, operations in _PATH_DEFINITIONS.items():
+    for path, operations in _collect_documented_paths(flask_app).items():
         spec.path(path=path, operations=operations)
 
     return spec
 
 
 def generate_openapi_spec(
-    endpoint_name: str, host_url: str, template_path: str = "openapi.json"
+    endpoint_name: str,
+    host_url: str,
+    flask_app: Flask,
+    template_path: str = "openapi.json",
 ) -> Dict[str, Any]:
     """Generate a customised OpenAPI specification for an endpoint."""
 
     try:
-        spec = _build_spec().to_dict()
+        spec = _build_spec(flask_app).to_dict()
     except Exception as exc:  # pragma: no cover - bubbled via abort
         abort(500, description=f"Failed to build OpenAPI specification: {exc}")
 

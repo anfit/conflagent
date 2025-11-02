@@ -6,6 +6,7 @@ import copy
 import json
 from pathlib import Path
 
+from conflagent import app
 from conflagent_core.openapi import generate_openapi_spec
 
 
@@ -17,7 +18,7 @@ def test_generated_spec_matches_template():
 
     endpoint_name = "demo"
     host_url = "https://example.test/"
-    generated = generate_openapi_spec(endpoint_name, host_url)
+    generated = generate_openapi_spec(endpoint_name, host_url, app)
 
     expected = copy.deepcopy(template)
     expected["servers"] = [
