@@ -1,12 +1,17 @@
 name: CI Integration Tests
 
 on:
+  workflow_call:
+    secrets:
+      CONFLAGENT_DEV_URL:
+        required: true
+      CONFLAGENT_DEV_ENDPOINT:
+        required: true
+      CONFLAGENT_DEV_TOKEN:
+        required: true
   workflow_dispatch:
   schedule:
     - cron: '0 2 * * *'
-  push:
-    branches:
-      - staging
 
 jobs:
   integration-tests:
