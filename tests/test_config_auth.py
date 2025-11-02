@@ -5,11 +5,14 @@ from unittest.mock import patch, mock_open
 
 import pytest
 from flask import g
-from werkzeug.exceptions import Forbidden, NotFound, InternalServerError
+from werkzeug.exceptions import Forbidden, InternalServerError, NotFound
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from conflagent import load_config, CONFIG_CACHE, check_auth, build_headers, app
+from conflagent import app
+from conflagent_core.auth import check_auth
+from conflagent_core.config import CONFIG_CACHE, load_config
+from conflagent_core.confluence import ConfluenceClient
 
 
 def _valid_properties():
@@ -25,7 +28,7 @@ def _valid_properties():
     )
 
 
-@patch("conflagent.os.path.exists", return_value=True)
+@patch("conflagent_core.config.os.path.exists", return_value=True)
 def test_load_config_parses_and_caches(mock_exists):
     CONFIG_CACHE.clear()
     properties = _valid_properties()
@@ -33,7 +36,7 @@ def test_load_config_parses_and_caches(mock_exists):
         result = load_config("demo")
         assert result["email"] == "user@example.com"
         assert CONFIG_CACHE["demo"] is result
-        mock_file.assert_called_once_with("../conflagent.demo.properties", "r")
+        mock_file.assert_called_once_with("../conflagent.demo.properties", "r", encoding="utf-8")
 
         mock_file.reset_mock()
         cached = load_config("demo")
@@ -41,7 +44,7 @@ def test_load_config_parses_and_caches(mock_exists):
         mock_file.assert_not_called()
 
 
-@patch("conflagent.os.path.exists", return_value=False)
+@patch("conflagent_core.config.os.path.exists", return_value=False)
 def test_load_config_missing_file(mock_exists):
     CONFIG_CACHE.clear()
     with app.test_request_context("/"):
@@ -49,7 +52,7 @@ def test_load_config_missing_file(mock_exists):
             load_config("missing")
 
 
-@patch("conflagent.os.path.exists", return_value=True)
+@patch("conflagent_core.config.os.path.exists", return_value=True)
 def test_load_config_missing_key(mock_exists):
     CONFIG_CACHE.clear()
     with app.test_request_context("/"):
@@ -79,9 +82,8 @@ def test_check_auth_success():
 
 
 def test_build_headers_base64():
-    with app.test_request_context("/"):
-        g.config = {"email": "user", "api_token": "token"}
-        headers = build_headers()
+    client = ConfluenceClient({"email": "user", "api_token": "token", "space_key": "SPACE", "root_page_id": "root", "base_url": "http://example.com"})
+    headers = client.build_headers()
     token = base64.b64encode(b"user:token").decode()
     assert headers["Authorization"] == f"Basic {token}"
     assert headers["Content-Type"] == "application/json"

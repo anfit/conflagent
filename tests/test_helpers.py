@@ -1,22 +1,15 @@
-import pytest
-import sys
 import os
-from flask import g
-from unittest.mock import patch, MagicMock
+import sys
+from unittest.mock import MagicMock, patch
+
+import pytest
 from werkzeug.exceptions import HTTPException
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from conflagent import (
-    resolve_or_create_path,
-    update_page,
-    get_page_by_title,
-    list_pages_recursive,
-    get_page_by_path,
-    get_page_body,
-    create_or_update_page,
-    rename_page,
-    app,
-)
+
+from conflagent import app
+from conflagent_core.confluence import ConfluenceClient
+
 
 mock_config = {
     "gpt_shared_secret": "testsecret",
@@ -24,279 +17,202 @@ mock_config = {
     "space_key": "SPACE",
     "base_url": "http://example.com",
     "email": "a",
-    "api_token": "b"
+    "api_token": "b",
 }
 
-@patch("conflagent.get_page_by_title")
-@patch("conflagent.build_headers")
-@patch("conflagent.requests.post")
-def test_resolve_or_create_path(mock_post, mock_headers, mock_get_title):
+
+def make_client() -> ConfluenceClient:
+    return ConfluenceClient(mock_config)
+
+
+def test_resolve_or_create_path():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        with patch.object(ConfluenceClient, "get_page_by_title") as mock_get_title, patch.object(
+            ConfluenceClient, "_request"
+        ) as mock_request:
+            mock_get_title.side_effect = [{"id": "123"}, None]
+            post_response = MagicMock()
+            post_response.json.return_value = {"id": "456"}
+            mock_request.return_value = post_response
 
-        def get_title_side_effect(title, parent_id):
-            if title == "Level1":
-                return {"id": "123"}
-            return None
-        mock_get_title.side_effect = get_title_side_effect
+            result = client.resolve_or_create_path("Level1/Level2")
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"id": "456"}
-        mock_post.return_value = mock_response
-
-        result = resolve_or_create_path("Level1/Level2")
         assert result == "456"
 
 
-@patch("conflagent.build_headers")
-@patch("conflagent.requests.post")
-@patch("conflagent.requests.get")
-def test_resolve_or_create_path_abort_on_failure(mock_get, mock_post, mock_headers):
+def test_resolve_or_create_path_abort_on_failure():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        failure = HTTPException("error")
+        failure.code = 500
+        with patch.object(ConfluenceClient, "get_page_by_title", return_value=None), patch.object(
+            ConfluenceClient, "_request", side_effect=failure
+        ):
+            with pytest.raises(HTTPException) as exc:
+                client.resolve_or_create_path("NewPage")
 
-        mock_get_response = MagicMock()
-        mock_get_response.status_code = 200
-        mock_get_response.json.return_value = {"results": []}
-        mock_get.return_value = mock_get_response
-
-        mock_post_response = MagicMock()
-        mock_post_response.status_code = 500
-        mock_post_response.text = "error"
-        mock_post.return_value = mock_post_response
-
-        with pytest.raises(HTTPException) as exc:
-            resolve_or_create_path("NewPage")
         assert getattr(exc.value, "code", None) == 500
 
-@patch("conflagent.build_headers")
-@patch("conflagent.requests.put")
-@patch("conflagent.requests.get")
-def test_update_page(mock_get, mock_put, mock_headers):
+
+def test_update_page():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        get_response = MagicMock()
+        get_response.json.return_value = {"version": {"number": 1}}
+        put_response = MagicMock()
+        with patch.object(ConfluenceClient, "_request", side_effect=[get_response, put_response]):
+            result = client.update_page({"id": "999", "title": "TestPage"}, "Updated body")
 
-        mock_get_response = MagicMock()
-        mock_get_response.status_code = 200
-        mock_get_response.json.return_value = {"version": {"number": 1}}
-        mock_get.return_value = mock_get_response
-
-        mock_put_response = MagicMock()
-        mock_put_response.status_code = 200
-        mock_put.return_value = mock_put_response
-
-        page = {"id": "999", "title": "TestPage"}
-        result = update_page(page, "Updated body")
         assert result == {"message": "Page updated", "version": 2}
 
 
-@patch("conflagent.build_headers")
-@patch("conflagent.requests.get")
-@patch("conflagent.requests.put")
-def test_update_page_abort_on_failure(mock_put, mock_get, mock_headers):
+def test_update_page_abort_on_failure():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        failure = HTTPException("oops")
+        failure.code = 500
+        with patch.object(ConfluenceClient, "_request", side_effect=failure):
+            with pytest.raises(HTTPException) as exc:
+                client.update_page({"id": "1", "title": "Fail"}, "body")
 
-        mock_get_response = MagicMock()
-        mock_get_response.status_code = 500
-        mock_get_response.text = "oops"
-        mock_get.return_value = mock_get_response
-
-        with pytest.raises(HTTPException) as exc:
-            update_page({"id": "1", "title": "Fail"}, "body")
         assert getattr(exc.value, "code", None) == 500
 
 
-@patch("conflagent.requests.get")
-@patch("conflagent.build_headers")
-def test_get_page_by_title_found(mock_headers, mock_get):
+def test_get_page_by_title_found():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {
+        client = make_client()
+        response = MagicMock()
+        response.json.return_value = {
             "results": [
                 {"title": "Other", "id": "1"},
                 {"title": "Match", "id": "2"},
             ]
         }
-        mock_get.return_value = mock_response
+        with patch.object(ConfluenceClient, "_request", return_value=response):
+            page = client.get_page_by_title("Match", "root")
 
-        page = get_page_by_title("Match", "root")
         assert page["id"] == "2"
 
 
-@patch("conflagent.requests.get")
-@patch("conflagent.build_headers")
-def test_get_page_by_title_missing(mock_headers, mock_get):
+def test_get_page_by_title_missing():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        response = MagicMock()
+        response.json.return_value = {"results": []}
+        with patch.object(ConfluenceClient, "_request", return_value=response):
+            page = client.get_page_by_title("Missing", "root")
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"results": []}
-        mock_get.return_value = mock_response
-
-        page = get_page_by_title("Missing", "root")
         assert page is None
 
 
-@patch("conflagent.requests.get")
-@patch("conflagent.build_headers")
-def test_list_pages_recursive(mock_headers, mock_get):
+def test_list_pages_recursive():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
 
-        def mock_get_side_effect(url, headers):
+        def request_side_effect(method, url, **kwargs):
             response = MagicMock()
-            response.status_code = 200
             if url.endswith("/root/child/page"):
-                response.json.return_value = {
-                    "results": [
-                        {"title": "Level1", "id": "1"},
-                    ]
-                }
+                response.json.return_value = {"results": [{"title": "Level1", "id": "1"}]}
             elif url.endswith("/1/child/page"):
-                response.json.return_value = {
-                    "results": [
-                        {"title": "Level2", "id": "2"}
-                    ]
-                }
+                response.json.return_value = {"results": [{"title": "Level2", "id": "2"}]}
             else:
-                response.json.return_value = {
-                    "results": []
-                }
+                response.json.return_value = {"results": []}
             return response
 
-        mock_get.side_effect = mock_get_side_effect
+        with patch.object(ConfluenceClient, "_request", side_effect=request_side_effect):
+            paths = client._list_pages_recursive("root")
 
-        paths = list_pages_recursive("root")
         assert paths == ["Level1", "Level1/Level2"]
 
 
-@patch("conflagent.get_page_by_title")
-def test_get_page_by_path_found(mock_get_title):
+def test_get_page_by_path_found():
     with app.test_request_context():
-        g.config = mock_config
-        mock_get_title.side_effect = [
-            {"id": "1"},
-            {"id": "2"},
-        ]
+        client = make_client()
+        with patch.object(
+            ConfluenceClient,
+            "get_page_by_title",
+            side_effect=[{"id": "1"}, {"id": "2"}],
+        ):
+            page = client.get_page_by_path("Level1/Level2")
 
-        page = get_page_by_path("Level1/Level2")
         assert page == {"id": "2"}
 
 
-@patch("conflagent.get_page_by_title")
-def test_get_page_by_path_missing(mock_get_title):
+def test_get_page_by_path_missing():
     with app.test_request_context():
-        g.config = mock_config
-        mock_get_title.side_effect = [{"id": "1"}, None]
+        client = make_client()
+        with patch.object(
+            ConfluenceClient,
+            "get_page_by_title",
+            side_effect=[{"id": "1"}, None],
+        ):
+            page = client.get_page_by_path("Level1/Level2")
 
-        page = get_page_by_path("Level1/Level2")
         assert page is None
 
 
-@patch("conflagent.requests.get")
-@patch("conflagent.build_headers")
-def test_get_page_body(mock_headers, mock_get):
+def test_get_page_body():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        response = MagicMock()
+        response.json.return_value = {"body": {"storage": {"value": "<p>Body</p>"}}}
+        with patch.object(ConfluenceClient, "_request", return_value=response):
+            body = client.get_page_body("123")
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"body": {"storage": {"value": "<p>Body</p>"}}}
-        mock_get.return_value = mock_response
-
-        body = get_page_body("123")
         assert body == "<p>Body</p>"
 
 
-@patch("conflagent.update_page")
-@patch("conflagent.get_page_by_title")
-@patch("conflagent.resolve_or_create_path")
-def test_create_or_update_page_updates_existing(mock_resolve, mock_get_title, mock_update):
+def test_create_or_update_page_updates_existing():
     with app.test_request_context():
-        g.config = mock_config
-        mock_resolve.return_value = "parent"
+        client = make_client()
         existing_page = {"id": "1", "title": "Page"}
-        mock_get_title.return_value = existing_page
-        mock_update.return_value = {"message": "Page updated"}
-
-        result = create_or_update_page("Parent/Page", "body")
+        with patch.object(ConfluenceClient, "resolve_or_create_path", return_value="parent"), patch.object(
+            ConfluenceClient, "get_page_by_title", return_value=existing_page
+        ), patch.object(ConfluenceClient, "update_page", return_value={"message": "Page updated"}) as mock_update:
+            result = client.create_or_update_page("Parent/Page", "body")
 
         mock_update.assert_called_once_with(existing_page, "body")
         assert result == {"message": "Page updated"}
 
 
-@patch("conflagent.requests.post")
-@patch("conflagent.build_headers")
-@patch("conflagent.get_page_by_title")
-@patch("conflagent.resolve_or_create_path")
-def test_create_or_update_page_creates_new(mock_resolve, mock_get_title, mock_headers, mock_post):
+def test_create_or_update_page_creates_new():
     with app.test_request_context():
-        g.config = mock_config
-        mock_resolve.return_value = "parent"
-        mock_get_title.return_value = None
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        post_response = MagicMock()
+        post_response.json.return_value = {"id": "99"}
+        with patch.object(ConfluenceClient, "resolve_or_create_path", return_value="parent"), patch.object(
+            ConfluenceClient, "get_page_by_title", return_value=None
+        ), patch.object(ConfluenceClient, "_request", return_value=post_response):
+            result = client.create_or_update_page("Parent/NewPage", "body")
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.json.return_value = {"id": "99"}
-        mock_post.return_value = mock_response
-
-        result = create_or_update_page("Parent/NewPage", "body")
         assert result == {"message": "Page created", "id": "99"}
 
 
-@patch("conflagent.requests.put")
-@patch("conflagent.requests.get")
-@patch("conflagent.build_headers")
-@patch("conflagent.get_page_body")
-def test_rename_page_success(mock_get_body, mock_headers, mock_get, mock_put):
+def test_rename_page_success():
     with app.test_request_context():
-        g.config = mock_config
-        mock_get_body.return_value = "<p>Body</p>"
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
+        client = make_client()
+        get_response = MagicMock()
+        get_response.json.return_value = {"version": {"number": 1}}
+        put_response = MagicMock()
+        with patch.object(ConfluenceClient, "get_page_body", return_value="<p>Body</p>"), patch.object(
+            ConfluenceClient, "_request", side_effect=[get_response, put_response]
+        ):
+            result = client.rename_page({"id": "1", "title": "Old"}, "New")
 
-        mock_get_response = MagicMock()
-        mock_get_response.status_code = 200
-        mock_get_response.json.return_value = {"version": {"number": 1}}
-        mock_get.return_value = mock_get_response
-
-        mock_put_response = MagicMock()
-        mock_put_response.status_code = 200
-        mock_put.return_value = mock_put_response
-
-        result = rename_page({"id": "1", "title": "Old"}, "New")
         assert result == {"message": "Page renamed", "version": 2}
 
 
-@patch("conflagent.requests.get")
-@patch("conflagent.build_headers")
-@patch("conflagent.get_page_body")
-def test_rename_page_failure(mock_get_body, mock_headers, mock_get):
+def test_rename_page_failure():
     with app.test_request_context():
-        g.config = mock_config
-        mock_headers.return_value = {"Authorization": "Basic dummy"}
-        mock_get_body.return_value = ""
+        client = make_client()
+        failure = HTTPException("error")
+        failure.code = 500
+        with patch.object(ConfluenceClient, "get_page_body", return_value=""), patch.object(
+            ConfluenceClient, "_request", side_effect=failure
+        ):
+            with pytest.raises(HTTPException) as exc:
+                client.rename_page({"id": "1", "title": "Old"}, "New")
 
-        mock_response = MagicMock()
-        mock_response.status_code = 500
-        mock_response.text = "error"
-        mock_get.return_value = mock_response
-
-        with pytest.raises(HTTPException) as exc:
-            rename_page({"id": "1", "title": "Old"}, "New")
         assert getattr(exc.value, "code", None) == 500
 
