@@ -47,10 +47,11 @@ It should be placed *outside* deployment folder.
 
 ```
 conflagent/
-├── conflagent.py                    # Flask application implementing the API
+├── conflagent.py                    # Flask routing entry point with lightweight handlers
+├── conflagent_core/                 # Core services for config, auth, OpenAPI, and Confluence access
 ├── conflagent.properties.example    # Example configuration file
 ├── openapi.json                     # OpenAPI 3.1 schema template used per endpoint
-├── tests/                           # Test suite covering all endpoints
+├── tests/                           # Unit and integration tests covering routes and services
 ```
 
 ## ⚙️ Setup & Deployment
