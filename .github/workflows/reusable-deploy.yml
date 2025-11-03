@@ -1,0 +1,92 @@
+name: Reusable Deploy
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Git ref to deploy'
+        required: true
+        type: string
+      environment:
+        description: 'Override environment name (dev, stage, production)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy application
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Determine deployment target
+        id: env
+        env:
+          TARGET_BRANCH: ${{ inputs.ref }}
+          OVERRIDE_ENV: ${{ inputs.environment }}
+        run: |
+          BRANCH="$TARGET_BRANCH"
+          if [ -n "$OVERRIDE_ENV" ]; then
+            ENV_NAME="$OVERRIDE_ENV"
+          else
+            case "$BRANCH" in
+              main)
+                ENV_NAME="dev"
+                ;;
+              staging)
+                ENV_NAME="stage"
+                ;;
+              prod)
+                ENV_NAME="production"
+                ;;
+              *)
+                echo "❌ Unknown branch: $BRANCH"
+                exit 1
+                ;;
+            esac
+          fi
+          echo "env=${ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "✅ Will deploy branch '$BRANCH' → environment '$ENV_NAME'"
+
+      - name: Add known host
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_HOST }} ssh-ed25519 ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}" >> ~/.ssh/known_hosts
+
+      - name: Sync repository to server
+        run: |
+          echo "📤 Syncing to ${{ steps.env.outputs.env }} environment..."
+          rsync -az --delete \
+            --exclude '*.md' \
+            --exclude '*.example' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.gitignore' \
+            --exclude '.idea' \
+            --exclude 'tests' \
+            --exclude 'pytest.ini' \
+            ./ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/
+
+      - name: Install Python dependencies on server
+        run: |
+          echo "📦 Installing dependencies in venv for ${{ steps.env.outputs.env }} ..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "\
+            source /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/venv/bin/activate && \
+            pip install -r /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/requirements.txt"
+
+      - name: Restart remote service
+        run: |
+          echo "♻️ Restarting remote service..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "~/restart-env.sh ${{ steps.env.outputs.env }}"
