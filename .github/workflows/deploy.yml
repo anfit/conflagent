@@ -7,24 +7,188 @@ on:
       - staging
       - prod
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment (manual runs only)'
+        required: false
+        default: dev
+        type: choice
+        options:
+          - dev
+          - stage
+          - production
 
 jobs:
+  determine-target:
+    name: Determine deployment parameters
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.set-env.outputs.environment }}
+      run_integration: ${{ steps.set-env.outputs.run_integration }}
+    steps:
+      - name: Authorize manual deployment
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ACTOR: ${{ github.actor }}
+          MAINTAINERS: ${{ vars.DEPLOY_MAINTAINERS }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          TARGET_BRANCH: ${{ github.ref_name }}
+          TARGET_ENV: ${{ github.event.inputs.environment }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          actor = os.environ["ACTOR"].lower()
+          maintainers = [m.strip().lower() for m in os.environ.get("MAINTAINERS", "").split(",") if m.strip()]
+          repo_owner = os.environ["REPO_OWNER"].lower()
+          if not maintainers:
+            maintainers = [repo_owner]
+
+          if actor not in maintainers:
+            allowed = ", ".join(maintainers)
+            print(f"::error::Actor '{actor}' is not authorized to run manual deployments. Allowed maintainers: {allowed}")
+            sys.exit(1)
+
+          target_env = (os.environ.get("TARGET_ENV") or "dev").strip().lower()
+          if target_env not in {"dev", "stage", "production"}:
+            print(f"::error::Unsupported manual deployment environment '{target_env}'.")
+            sys.exit(1)
+
+          if target_env == "dev":
+            branch = os.environ["TARGET_BRANCH"]
+            owner, repo = os.environ["REPO"].split("/", 1)
+            token = os.environ["GH_TOKEN"]
+            query = """
+            query($owner: String!, $name: String!, $head: String!) {
+              repository(owner: $owner, name: $name) {
+                pullRequests(headRefName: $head, states: OPEN, first: 20) {
+                  nodes {
+                    number
+                    baseRefName
+                  }
+                }
+              }
+            }
+            """
+            payload = json.dumps({
+              "query": query,
+              "variables": {"owner": owner, "name": repo, "head": branch},
+            }).encode()
+
+            request = urllib.request.Request(
+              "https://api.github.com/graphql",
+              data=payload,
+              headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github+json",
+              },
+            )
+
+            with urllib.request.urlopen(request) as response:
+              data = json.load(response)
+
+            if data.get("errors"):
+              message = "; ".join(err.get("message", "Unknown error") for err in data["errors"])
+              print(f"::error::GitHub API error while checking pull requests: {message}")
+              sys.exit(1)
+
+            prs = data.get("data", {}).get("repository", {}).get("pullRequests", {}).get("nodes", [])
+            if not any(pr.get("baseRefName") == "dev" for pr in prs):
+              print(f"::error::Branch '{branch}' does not have an open pull request targeting 'dev'.")
+              sys.exit(1)
+          PY
+
+      - id: set-env
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          MANUAL_ENV: ${{ github.event.inputs.environment }}
+        run: |
+          branch="$REF_NAME"
+          event="$EVENT_NAME"
+          manual_env="${MANUAL_ENV,,}"
+
+          if [ "$event" = "workflow_dispatch" ]; then
+            env_name="${manual_env:-dev}"
+
+            case "$env_name" in
+              dev)
+                :
+                ;;
+              stage)
+                if [ "$branch" != "staging" ]; then
+                  echo "::error::Manual stage deployments must run from the 'staging' branch."
+                  exit 1
+                fi
+                ;;
+              production)
+                if [ "$branch" != "prod" ]; then
+                  echo "::error::Manual production deployments must run from the 'prod' branch."
+                  exit 1
+                fi
+                ;;
+              *)
+                echo "::error::Unknown manual environment '$env_name'."
+                exit 1
+                ;;
+            esac
+          else
+            case "$branch" in
+              main)
+                env_name="dev"
+                ;;
+              staging)
+                env_name="stage"
+                ;;
+              prod)
+                env_name="production"
+                ;;
+              *)
+                echo "::error::Deployments are only permitted from main, staging, or prod."
+                exit 1
+                ;;
+            esac
+          fi
+
+          run_integration="false"
+          if [ "$env_name" = "stage" ] || [ "$env_name" = "production" ]; then
+            run_integration="true"
+          fi
+
+          echo "environment=$env_name" >> "$GITHUB_OUTPUT"
+          echo "run_integration=$run_integration" >> "$GITHUB_OUTPUT"
+
   run-unit-tests:
+    needs: determine-target
     uses: ./.github/workflows/unit-tests.yml
 
   run-integration-tests:
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/prod'
+    needs: determine-target
+    if: needs.determine-target.outputs.run_integration == 'true'
     uses: ./.github/workflows/integration-tests.yml
     secrets: inherit
 
   deploy:
     name: Deploy application
-    needs: run-unit-tests
+    needs:
+      - determine-target
+      - run-unit-tests
+      - run-integration-tests
     runs-on: ubuntu-latest
     if: >-
-      github.ref == 'refs/heads/main' ||
-      github.ref == 'refs/heads/staging' ||
-      github.ref == 'refs/heads/prod'
+      needs.determine-target.result == 'success' &&
+      needs.run-unit-tests.result == 'success' &&
+      (
+        needs.determine-target.outputs.run_integration != 'true' ||
+        needs.run-integration-tests.result == 'success'
+      )
+    environment:
+      name: ${{ needs.determine-target.outputs.environment }}
 
     steps:
       - name: Checkout repository
@@ -35,29 +199,9 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
 
-      - name: Determine deployment target
-        id: env
-        env:
-          TARGET_BRANCH: ${{ github.ref_name }}
+      - name: Announce deployment target
         run: |
-          BRANCH="$TARGET_BRANCH"
-          case "$BRANCH" in
-            main)
-              ENV_NAME="dev"
-              ;;
-            staging)
-              ENV_NAME="stage"
-              ;;
-            prod)
-              ENV_NAME="production"
-              ;;
-            *)
-              echo "❌ Unknown branch: $BRANCH"
-              exit 1
-              ;;
-          esac
-          echo "env=${ENV_NAME}" >> $GITHUB_OUTPUT
-          echo "✅ Will deploy branch '$BRANCH' → environment '$ENV_NAME'"
+          echo "✅ Will deploy branch '${GITHUB_REF_NAME}' → environment '${{ needs.determine-target.outputs.environment }}'"
 
       - name: Add known host
         run: |
@@ -65,8 +209,10 @@ jobs:
           echo "${{ secrets.DEPLOY_HOST }} ssh-ed25519 ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}" >> ~/.ssh/known_hosts
 
       - name: Sync repository to server
+        env:
+          TARGET_ENV: ${{ needs.determine-target.outputs.environment }}
         run: |
-          echo "📤 Syncing to ${{ steps.env.outputs.env }} environment..."
+          echo "📤 Syncing to ${TARGET_ENV} environment..."
           rsync -az --delete \
             --exclude '*.md' \
             --exclude '*.example' \
@@ -77,17 +223,21 @@ jobs:
             --exclude 'tests' \
             --exclude 'pytest.ini' \
             ./ \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/deployments/${TARGET_ENV}/current/
 
       - name: Install Python dependencies on server
+        env:
+          TARGET_ENV: ${{ needs.determine-target.outputs.environment }}
         run: |
-          echo "📦 Installing dependencies in venv for ${{ steps.env.outputs.env }} ..."
+          echo "📦 Installing dependencies in venv for ${TARGET_ENV} ..."
           ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "\
-            source /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/venv/bin/activate && \
-            pip install -r /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.env.outputs.env }}/current/requirements.txt"
+            source /home/${{ secrets.DEPLOY_USER }}/deployments/${TARGET_ENV}/venv/bin/activate && \
+            pip install -r /home/${{ secrets.DEPLOY_USER }}/deployments/${TARGET_ENV}/current/requirements.txt"
 
       - name: Restart remote service
+        env:
+          TARGET_ENV: ${{ needs.determine-target.outputs.environment }}
         run: |
           echo "♻️ Restarting remote service..."
           ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
-            "~/restart-env.sh ${{ steps.env.outputs.env }}"
+            "~/restart-env.sh ${TARGET_ENV}"
