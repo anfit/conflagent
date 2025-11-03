@@ -36,14 +36,17 @@ jobs:
       - run-integration-tests
     runs-on: ubuntu-latest
     if: >-
+      always() &&
       (
-        github.event_name == 'push' && (
-          github.ref == 'refs/heads/main' ||
-          github.ref == 'refs/heads/staging' ||
-          github.ref == 'refs/heads/prod'
+        (
+          github.event_name == 'push' && (
+            github.ref == 'refs/heads/main' ||
+            github.ref == 'refs/heads/staging' ||
+            github.ref == 'refs/heads/prod'
+          )
+        ) || (
+          github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
         )
-      ) || (
-        github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
       )
       && needs.run-unit-tests.result == 'success'
       && (
