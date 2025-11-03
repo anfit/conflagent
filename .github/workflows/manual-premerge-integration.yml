@@ -1,10 +1,10 @@
-name: Manual Dev Deploy
+name: Manual Pre-merge Integration Test
 
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Branch to deploy to the dev environment'
+        description: 'Branch to temporarily deploy to the dev environment for integration tests'
         required: true
         default: main
 
