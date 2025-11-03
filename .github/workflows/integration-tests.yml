@@ -10,6 +10,9 @@ on:
       CONFLAGENT_DEV_TOKEN:
         required: true
   workflow_dispatch:
+  pull_request:
+    branches:
+      - staging
   schedule:
     - cron: '0 2 * * *'
 
@@ -17,6 +20,7 @@ jobs:
   integration-tests:
     name: Run integration tests against dev
     runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     env:
       CONFLAGENT_DEV_URL: ${{ secrets.CONFLAGENT_DEV_URL }}

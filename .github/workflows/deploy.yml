@@ -7,24 +7,49 @@ on:
       - staging
       - prod
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment for manual deployments'
+        type: choice
+        options:
+          - dev
+          - stage
+          - production
+        default: dev
 
 jobs:
   run-unit-tests:
     uses: ./.github/workflows/unit-tests.yml
 
   run-integration-tests:
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/prod'
+    if: |
+      github.ref == 'refs/heads/staging' ||
+      github.ref == 'refs/heads/prod' ||
+      (github.event_name == 'workflow_dispatch' && (inputs.environment == 'stage' || inputs.environment == 'production'))
     uses: ./.github/workflows/integration-tests.yml
     secrets: inherit
 
   deploy:
     name: Deploy application
-    needs: run-unit-tests
+    needs:
+      - run-unit-tests
+      - run-integration-tests
     runs-on: ubuntu-latest
     if: >-
-      github.ref == 'refs/heads/main' ||
-      github.ref == 'refs/heads/staging' ||
-      github.ref == 'refs/heads/prod'
+      (
+        github.event_name == 'push' && (
+          github.ref == 'refs/heads/main' ||
+          github.ref == 'refs/heads/staging' ||
+          github.ref == 'refs/heads/prod'
+        )
+      ) || (
+        github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
+      )
+      && needs.run-unit-tests.result == 'success'
+      && (
+        needs.run-integration-tests.result == 'success' ||
+        needs.run-integration-tests.result == 'skipped'
+      )
 
     steps:
       - name: Checkout repository
@@ -39,24 +64,35 @@ jobs:
         id: env
         env:
           TARGET_BRANCH: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || '' }}
         run: |
           BRANCH="$TARGET_BRANCH"
-          case "$BRANCH" in
-            main)
-              ENV_NAME="dev"
-              ;;
-            staging)
-              ENV_NAME="stage"
-              ;;
-            prod)
-              ENV_NAME="production"
-              ;;
-            *)
-              echo "❌ Unknown branch: $BRANCH"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$DISPATCH_ENV" != "dev" ] && [ "$DISPATCH_ENV" != "stage" ] && [ "$DISPATCH_ENV" != "production" ]; then
+              echo "❌ Unsupported manual environment: $DISPATCH_ENV"
               exit 1
-              ;;
-          esac
-          echo "env=${ENV_NAME}" >> $GITHUB_OUTPUT
+            fi
+            ENV_NAME="$DISPATCH_ENV"
+          else
+            case "$BRANCH" in
+              main)
+                ENV_NAME="dev"
+                ;;
+              staging)
+                ENV_NAME="stage"
+                ;;
+              prod)
+                ENV_NAME="production"
+                ;;
+              *)
+                echo "❌ Unknown branch: $BRANCH"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "env=${ENV_NAME}" >> "$GITHUB_OUTPUT"
           echo "✅ Will deploy branch '$BRANCH' → environment '$ENV_NAME'"
 
       - name: Add known host
