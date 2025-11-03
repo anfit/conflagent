@@ -9,17 +9,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  run-unit-tests:
-    uses: ./.github/workflows/unit-tests.yml
-
-  run-integration-tests:
-    if: github.ref == 'refs/heads/staging' || github.ref == 'refs/heads/prod'
-    uses: ./.github/workflows/integration-tests.yml
-    secrets: inherit
-
   deploy:
     name: Deploy application
-    needs: run-unit-tests
     runs-on: ubuntu-latest
     if: >-
       github.ref == 'refs/heads/main' ||

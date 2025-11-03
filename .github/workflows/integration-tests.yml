@@ -29,46 +29,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Ensure GitHub CLI is installed
-        run: |
-          if ! command -v gh >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y gh
-          fi
-
-      - name: Check for commits since last completed run
-        if: github.event_name == 'schedule'
-        id: commit-check
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          CURRENT_SHA=$(git rev-parse HEAD)
-          LAST_COMPLETED_SHA=$(gh run list \
-            --workflow "$GITHUB_WORKFLOW" \
-            --branch "$GITHUB_REF_NAME" \
-            --status completed \
-            --json headSha \
-            -q '.[0].headSha' || true)
-
-          echo "Current SHA: $CURRENT_SHA"
-          if [ -n "$LAST_COMPLETED_SHA" ]; then
-            echo "Last completed run SHA: $LAST_COMPLETED_SHA"
-          else
-            echo "No completed runs found for workflow ${GITHUB_WORKFLOW} on branch ${GITHUB_REF_NAME}."
-          fi
-
-          if [ -n "$LAST_COMPLETED_SHA" ] && [ "$CURRENT_SHA" = "$LAST_COMPLETED_SHA" ]; then
-            echo "no_changes=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "no_changes=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip integration tests when no new commits
-        if: github.event_name == 'schedule' && steps.commit-check.outputs.no_changes == 'true'
-        run: |
-          echo "No new commits since last nightly run, skipping integration tests"
-          exit 0
-
       - name: Set up Python
         if: github.event_name != 'schedule' || steps.commit-check.outputs.no_changes != 'true'
         uses: actions/setup-python@v5
