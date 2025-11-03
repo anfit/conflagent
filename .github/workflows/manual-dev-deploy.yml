@@ -96,3 +96,63 @@ jobs:
       - name: Run integration suite
         run: |
           pytest -m integration -v
+
+  redeploy-dev:
+    name: Redeploy default branch to dev
+    runs-on: ubuntu-latest
+    needs:
+      - integration-tests
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Determine deployment target
+        id: redeploy_env
+        env:
+          TARGET_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          BRANCH="$TARGET_BRANCH"
+          ENV_NAME="dev"
+          echo "env=${ENV_NAME}" >> $GITHUB_OUTPUT
+          echo "✅ Will redeploy branch '$BRANCH' → environment '$ENV_NAME'"
+
+      - name: Add known host
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_HOST }} ssh-ed25519 ${{ secrets.DEPLOY_SSH_PUBLIC_KEY }}" >> ~/.ssh/known_hosts
+
+      - name: Sync repository to server
+        run: |
+          echo "📤 Syncing to ${{ steps.redeploy_env.outputs.env }} environment..."
+          rsync -az --delete \
+            --exclude '*.md' \
+            --exclude '*.example' \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude '.gitignore' \
+            --exclude '.idea' \
+            --exclude 'tests' \
+            --exclude 'pytest.ini' \
+            ./ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.redeploy_env.outputs.env }}/current/
+
+      - name: Install Python dependencies on server
+        run: |
+          echo "📦 Installing dependencies in venv for ${{ steps.redeploy_env.outputs.env }} ..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} "\
+            source /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.redeploy_env.outputs.env }}/venv/bin/activate && \
+            pip install -r /home/${{ secrets.DEPLOY_USER }}/deployments/${{ steps.redeploy_env.outputs.env }}/current/requirements.txt"
+
+      - name: Restart remote service
+        run: |
+          echo "♻️ Restarting remote service..."
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            "~/restart-env.sh ${{ steps.redeploy_env.outputs.env }}"
