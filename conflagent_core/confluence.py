@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import requests
 from flask import abort
@@ -41,9 +41,16 @@ class ConfluenceClient:
             "Content-Type": "application/json",
         }
 
-    def _request(self, method: str, url: str, **kwargs: Any) -> requests.Response:
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        expected_status: Sequence[int] = (200, 201),
+        **kwargs: Any,
+    ) -> requests.Response:
         response = requests.request(method, url, headers=self.build_headers(), **kwargs)
-        if response.status_code != 200:
+        if response.status_code not in expected_status:
             abort(response.status_code, response.text)
         return response
 
@@ -169,4 +176,9 @@ class ConfluenceClient:
         url = f"{self.base_url}/rest/api/content/{page['id']}"
         self._request("put", url, json=payload)
         return {"message": "Page renamed", "version": version}
+
+    def delete_page(self, page: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.base_url}/rest/api/content/{page['id']}"
+        self._request("delete", url, expected_status=(204, 200))
+        return {"message": "Page deleted"}
 

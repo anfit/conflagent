@@ -216,3 +216,29 @@ def test_rename_page_failure():
 
         assert getattr(exc.value, "code", None) == 500
 
+
+def test_delete_page_success():
+    with app.test_request_context():
+        client = make_client()
+        with patch.object(ConfluenceClient, "_request") as mock_request:
+            result = client.delete_page({"id": "123"})
+
+        mock_request.assert_called_once_with(
+            "delete",
+            "http://example.com/rest/api/content/123",
+            expected_status=(204, 200),
+        )
+        assert result == {"message": "Page deleted"}
+
+
+def test_delete_page_failure():
+    with app.test_request_context():
+        client = make_client()
+        failure = HTTPException("bad")
+        failure.code = 500
+        with patch.object(ConfluenceClient, "_request", side_effect=failure):
+            with pytest.raises(HTTPException) as exc:
+                client.delete_page({"id": "999"})
+
+        assert getattr(exc.value, "code", None) == 500
+

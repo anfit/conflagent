@@ -258,6 +258,55 @@ def api_update_page(endpoint_name: str, title: str):
     return jsonify(client.update_page(page, new_body))
 
 
+@app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["DELETE"])
+@with_config
+@document_operation(
+    "/pages/{title}",
+    "delete",
+    summary="Delete a page by title",
+    description=(
+        "Deletes a Confluence page that is a direct child of the configured root "
+        "page. All descendants of the page are also deleted."
+    ),
+    operationId="deletePageByTitle",
+    parameters=[
+        {
+            "name": "title",
+            "in": "path",
+            "required": True,
+            "schema": {"type": "string"},
+        }
+    ],
+    security=BEARER_SECURITY_REQUIREMENT,
+    responses={
+        "200": {
+            "description": "Page deleted successfully",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {"message": {"type": "string"}},
+                    }
+                }
+            },
+        },
+        "403": {"description": "Forbidden: Invalid token"},
+        "404": {
+            "description": "Not Found: Page not found or not a child of root",
+        },
+    },
+)
+def api_delete_page(endpoint_name: str, title: str):
+    check_auth()
+
+    client = _get_client()
+    page = client.get_page_by_path(title)
+    if not page:
+        abort(404, description="Page not found")
+
+    return jsonify(client.delete_page(page))
+
+
 @app.route("/endpoint/<endpoint_name>/pages/rename", methods=["POST"])
 @with_config
 @document_operation(
