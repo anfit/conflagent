@@ -2,17 +2,12 @@ name: Manual Pre-merge Integration Test
 
 on:
   workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to temporarily deploy to the dev environment for integration tests'
-        required: true
-        default: main
 
 jobs:
   deploy:
     uses: ./.github/workflows/reusable-deploy.yml
     with:
-      ref: ${{ inputs.branch }}
+      ref: ${{ github.ref_name }}
       environment: dev
     secrets: inherit
 
@@ -29,8 +24,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
