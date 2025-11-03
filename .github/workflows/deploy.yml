@@ -34,6 +34,8 @@ jobs:
           REPO_OWNER: ${{ github.repository_owner }}
           TARGET_BRANCH: ${{ github.ref_name }}
           TARGET_ENV: ${{ github.event.inputs.environment }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           python - <<'PY'
           import os
@@ -56,21 +58,71 @@ jobs:
             sys.exit(1)
 
           branch = os.environ["TARGET_BRANCH"]
-          required_branch = {
-            "dev": "main",
-            "stage": "staging",
-            "production": "prod",
-          }[target_env]
 
-          if branch != required_branch:
-            print(
-              "::error::Manual {env} deployments must run from the '{required}' branch. Current branch: '{branch}'.".format(
-                env=target_env,
-                required=required_branch,
-                branch=branch,
+          if target_env == "dev":
+            if branch != "main":
+              owner, repo = os.environ["REPO"].split("/", 1)
+              token = os.environ["GH_TOKEN"]
+
+              import json
+              import urllib.request
+
+              query = """
+              query($owner: String!, $name: String!, $head: String!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequests(headRefName: $head, states: OPEN, first: 20) {
+                    nodes {
+                      number
+                      baseRefName
+                    }
+                  }
+                }
+              }
+              """
+
+              payload = json.dumps({
+                "query": query,
+                "variables": {"owner": owner, "name": repo, "head": branch},
+              }).encode()
+
+              request = urllib.request.Request(
+                "https://api.github.com/graphql",
+                data=payload,
+                headers={
+                  "Authorization": f"token {token}",
+                  "Accept": "application/vnd.github+json",
+                },
               )
-            )
-            sys.exit(1)
+
+              with urllib.request.urlopen(request) as response:
+                data = json.load(response)
+
+              if data.get("errors"):
+                message = "; ".join(err.get("message", "Unknown error") for err in data["errors"])
+                print(f"::error::GitHub API error while checking pull requests: {message}")
+                sys.exit(1)
+
+              prs = data.get("data", {}).get("repository", {}).get("pullRequests", {}).get("nodes", [])
+              if not any(pr.get("baseRefName") == "main" for pr in prs):
+                print(
+                  f"::error::Branch '{branch}' does not have an open pull request targeting 'main'."
+                )
+                sys.exit(1)
+          else:
+            required_branch = {
+              "stage": "staging",
+              "production": "prod",
+            }[target_env]
+
+            if branch != required_branch:
+              print(
+                "::error::Manual {env} deployments must run from the '{required}' branch. Current branch: '{branch}'.".format(
+                  env=target_env,
+                  required=required_branch,
+                  branch=branch,
+                )
+              )
+              sys.exit(1)
           PY
 
       - id: set-env
@@ -88,10 +140,6 @@ jobs:
 
             case "$env_name" in
               dev)
-                if [ "$branch" != "main" ]; then
-                  echo "::error::Manual dev deployments must run from the 'main' branch."
-                  exit 1
-                fi
                 ;;
               stage)
                 if [ "$branch" != "staging" ]; then
