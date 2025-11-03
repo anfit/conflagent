@@ -34,14 +34,10 @@ jobs:
           REPO_OWNER: ${{ github.repository_owner }}
           TARGET_BRANCH: ${{ github.ref_name }}
           TARGET_ENV: ${{ github.event.inputs.environment }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
         run: |
           python - <<'PY'
-          import json
           import os
           import sys
-          import urllib.request
 
           actor = os.environ["ACTOR"].lower()
           maintainers = [m.strip().lower() for m in os.environ.get("MAINTAINERS", "").split(",") if m.strip()]
@@ -59,48 +55,22 @@ jobs:
             print(f"::error::Unsupported manual deployment environment '{target_env}'.")
             sys.exit(1)
 
-          if target_env == "dev":
-            branch = os.environ["TARGET_BRANCH"]
-            owner, repo = os.environ["REPO"].split("/", 1)
-            token = os.environ["GH_TOKEN"]
-            query = """
-            query($owner: String!, $name: String!, $head: String!) {
-              repository(owner: $owner, name: $name) {
-                pullRequests(headRefName: $head, states: OPEN, first: 20) {
-                  nodes {
-                    number
-                    baseRefName
-                  }
-                }
-              }
-            }
-            """
-            payload = json.dumps({
-              "query": query,
-              "variables": {"owner": owner, "name": repo, "head": branch},
-            }).encode()
+          branch = os.environ["TARGET_BRANCH"]
+          required_branch = {
+            "dev": "main",
+            "stage": "staging",
+            "production": "prod",
+          }[target_env]
 
-            request = urllib.request.Request(
-              "https://api.github.com/graphql",
-              data=payload,
-              headers={
-                "Authorization": f"token {token}",
-                "Accept": "application/vnd.github+json",
-              },
+          if branch != required_branch:
+            print(
+              "::error::Manual {env} deployments must run from the '{required}' branch. Current branch: '{branch}'.".format(
+                env=target_env,
+                required=required_branch,
+                branch=branch,
+              )
             )
-
-            with urllib.request.urlopen(request) as response:
-              data = json.load(response)
-
-            if data.get("errors"):
-              message = "; ".join(err.get("message", "Unknown error") for err in data["errors"])
-              print(f"::error::GitHub API error while checking pull requests: {message}")
-              sys.exit(1)
-
-            prs = data.get("data", {}).get("repository", {}).get("pullRequests", {}).get("nodes", [])
-            if not any(pr.get("baseRefName") == "dev" for pr in prs):
-              print(f"::error::Branch '{branch}' does not have an open pull request targeting 'dev'.")
-              sys.exit(1)
+            sys.exit(1)
           PY
 
       - id: set-env
@@ -118,7 +88,10 @@ jobs:
 
             case "$env_name" in
               dev)
-                :
+                if [ "$branch" != "main" ]; then
+                  echo "::error::Manual dev deployments must run from the 'main' branch."
+                  exit 1
+                fi
                 ;;
               stage)
                 if [ "$branch" != "staging" ]; then
