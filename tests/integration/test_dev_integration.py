@@ -1,11 +1,24 @@
 """Integration tests hitting the dev deployment."""
+import logging
 import os
 import time
+from contextlib import contextmanager
 from typing import Dict, Iterable, List
 from urllib.parse import quote
 
 import pytest
 import requests
+
+
+LOGGER = logging.getLogger(__name__)
+if not LOGGER.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
+LOGGER.setLevel(logging.INFO)
+LOGGER.propagate = False
 
 
 REQUIRED_ENV_VARS = {
@@ -138,6 +151,18 @@ def _ensure_no_sandbox_titles(titles: Iterable[str]) -> None:
     assert not leftovers, f"Unexpected sandbox titles lingering: {leftovers}"
 
 
+@contextmanager
+def _log_step(step_name: str):
+    LOGGER.info("Starting step: %s", step_name)
+    try:
+        yield
+    except Exception:  # pragma: no cover - integration logging for failures
+        LOGGER.exception("Step failed: %s", step_name)
+        raise
+    else:
+        LOGGER.info("Completed step: %s", step_name)
+
+
 @pytest.mark.integration
 def test_health_endpoint_reports_ok(dev_config: Dict[str, str]):
     response = requests.get(
@@ -209,18 +234,20 @@ def test_conflagent_operator_sandbox_cycle(dev_config: Dict[str, str]):
     """Exercise the full sandbox lifecycle of the Conflagent operator."""
 
     # Step 0 — Pre-cleanup: delete any lingering sandbox pages.
-    existing_titles = _list_pages(dev_config)
-    _cleanup_existing_sandbox_pages(dev_config, existing_titles)
-    _ensure_no_sandbox_titles(_list_pages(dev_config))
+    with _log_step("pre-cleanup sandbox pages"):
+        existing_titles = _list_pages(dev_config)
+        _cleanup_existing_sandbox_pages(dev_config, existing_titles)
+        _ensure_no_sandbox_titles(_list_pages(dev_config))
 
     # Step 1 — Health Check
-    response = requests.get(
-        _full_url(dev_config, "/health"),
-        headers=_auth_headers(dev_config["token"]),
-        timeout=10,
-    )
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    with _log_step("health check"):
+        response = requests.get(
+            _full_url(dev_config, "/health"),
+            headers=_auth_headers(dev_config["token"]),
+            timeout=10,
+        )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok"}
 
     # Steps 2-7 execute in a try/finally to guarantee cleanup.
     created_title = SANDBOX_TITLE
@@ -228,35 +255,46 @@ def test_conflagent_operator_sandbox_cycle(dev_config: Dict[str, str]):
 
     try:
         # Step 2 — Create a Page
-        creation_result = _create_page(dev_config, created_title, SANDBOX_BODY)
-        assert "created" in creation_result["message"].lower()
+        with _log_step("create sandbox page"):
+            creation_result = _create_page(dev_config, created_title, SANDBOX_BODY)
+            assert "created" in creation_result["message"].lower()
 
         # Step 3 — Read the Page
-        read_payload = _read_page(dev_config, created_title)
-        assert "This is a test page created automatically." in read_payload["body"]
+        with _log_step("read sandbox page"):
+            read_payload = _read_page(dev_config, created_title)
+            assert "This is a test page created automatically." in read_payload["body"]
 
         # Step 4 — Update the Page
-        update_result = _update_page(dev_config, created_title, SANDBOX_UPDATED_BODY)
-        assert "version" in update_result
-        updated_payload = _read_page(dev_config, created_title)
-        assert "This page has been updated successfully." in updated_payload["body"]
+        with _log_step("update sandbox page"):
+            update_result = _update_page(
+                dev_config, created_title, SANDBOX_UPDATED_BODY
+            )
+            assert "version" in update_result
+            updated_payload = _read_page(dev_config, created_title)
+            assert "This page has been updated successfully." in updated_payload[
+                "body"
+            ]
 
         # Step 5 — Rename the Page
-        _rename_page(dev_config, created_title, renamed_title)
-        titles_after_rename = _list_pages(dev_config)
-        assert renamed_title in titles_after_rename
-        assert created_title not in titles_after_rename
+        with _log_step("rename sandbox page"):
+            _rename_page(dev_config, created_title, renamed_title)
+            titles_after_rename = _list_pages(dev_config)
+            assert renamed_title in titles_after_rename
+            assert created_title not in titles_after_rename
 
         # Step 6 — Delete the Page
-        delete_result = _delete_page(dev_config, renamed_title)
-        assert "deleted" in delete_result["message"].lower()
+        with _log_step("delete sandbox page"):
+            delete_result = _delete_page(dev_config, renamed_title)
+            assert "deleted" in delete_result["message"].lower()
 
     finally:
         # Step 7 — Post-cleanup
-        current_titles = _list_pages(dev_config)
-        for lingering in (renamed_title, created_title):
-            if lingering in current_titles:
-                delete_result = _delete_page(dev_config, lingering)
-                assert "deleted" in delete_result["message"].lower()
+        with _log_step("post-cleanup sandbox pages"):
+            current_titles = _list_pages(dev_config)
+            for lingering in (renamed_title, created_title):
+                if lingering in current_titles:
+                    delete_result = _delete_page(dev_config, lingering)
+                    assert "deleted" in delete_result["message"].lower()
 
-    _ensure_no_sandbox_titles(_list_pages(dev_config))
+    with _log_step("verify sandbox titles cleared"):
+        _ensure_no_sandbox_titles(_list_pages(dev_config))
