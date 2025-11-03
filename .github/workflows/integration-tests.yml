@@ -17,6 +17,13 @@ jobs:
   integration-tests:
     name: Run integration tests against dev
     runs-on: ubuntu-latest
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.triggering_actor == github.repository_owner ||
+      contains(
+        format(',{0},', replace(vars.MAINTAINERS, ' ', '')),
+        format(',{0},', github.triggering_actor)
+      )
 
     env:
       CONFLAGENT_DEV_URL: ${{ secrets.CONFLAGENT_DEV_URL }}

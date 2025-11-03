@@ -12,10 +12,19 @@ jobs:
   deploy:
     name: Deploy application
     runs-on: ubuntu-latest
-    if: >-
-      github.ref == 'refs/heads/main' ||
-      github.ref == 'refs/heads/staging' ||
-      github.ref == 'refs/heads/prod'
+    if: >
+      (
+        github.ref == 'refs/heads/main' ||
+        github.ref == 'refs/heads/staging' ||
+        github.ref == 'refs/heads/prod'
+      ) && (
+        github.event_name != 'workflow_dispatch' ||
+        github.triggering_actor == github.repository_owner ||
+        contains(
+          format(',{0},', replace(vars.MAINTAINERS, ' ', '')),
+          format(',{0},', github.triggering_actor)
+        )
+      )
 
     steps:
       - name: Checkout repository

@@ -2,11 +2,19 @@ name: CI Unit Tests
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 jobs:
   unit-tests:
     name: Run unit tests
     runs-on: ubuntu-latest
+    if: >
+      github.event_name != 'workflow_dispatch' ||
+      github.triggering_actor == github.repository_owner ||
+      contains(
+        format(',{0},', replace(vars.MAINTAINERS, ' ', '')),
+        format(',{0},', github.triggering_actor)
+      )
 
     steps:
       - name: Checkout repository
