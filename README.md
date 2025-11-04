@@ -13,6 +13,7 @@
 - Operations limited to a pre-defined Confluence space and root page per endpoint
 - Fully compatible with Custom GPTs via OpenAPI tool definition
 - Minimal, self-contained Flask app with no external database
+- Hierarchical navigation endpoints accept **page titles** (no Confluence IDs required); Conflagent resolves IDs internally when calling the Confluence API
 
 ## 📚 Use Case
 
@@ -82,15 +83,19 @@ GPT tool calls must include this to access or modify Confluence content. The sec
 
 ## 📖 API Endpoints (summary for each `<endpoint>`)
 
-| Method | Path                                         | Description                                                                      | Auth required |
-|--------|----------------------------------------------|----------------------------------------------------------------------------------|----------------|
-| GET    | `/endpoint/<endpoint>/pages`                | List all subpages under the root                                                 | ✅ Yes          |
-| GET    | `/endpoint/<endpoint>/pages/{title}`        | Read a page by title (returned as Confluence HTML)                              | ✅ Yes          |
-| POST   | `/endpoint/<endpoint>/pages`                | Create a new page under root. Accepts Markdown, auto-converted to Confluence.   | ✅ Yes          |
-| PUT    | `/endpoint/<endpoint>/pages/{title}`        | Update a page. Submit **full** content. Accepts Markdown input.                  | ✅ Yes          |
-| POST   | `/endpoint/<endpoint>/pages/rename`         | Rename a page from one title to another                                          | ✅ Yes          |
-| GET    | `/endpoint/<endpoint>/openapi.json`         | Dynamic OpenAPI schema for GPT tooling                                           | ❌ No           |
-| GET    | `/endpoint/<endpoint>/health`               | Health check                                                                     | ❌ No           |
+| Method | Path | Description | Auth required |
+|--------|------|-------------|----------------|
+| GET    | `/endpoint/<endpoint>/pages` | List all subpages under the root | ✅ Yes |
+| GET    | `/endpoint/<endpoint>/pages/tree` | Retrieve the page hierarchy (depth-limited) | ✅ Yes |
+| GET    | `/endpoint/<endpoint>/pages/{title}` | Read a page by title (returned as Confluence HTML) | ✅ Yes |
+| GET    | `/endpoint/<endpoint>/pages/{title}/children` | List the direct children for a page (identified by title) | ✅ Yes |
+| GET    | `/endpoint/<endpoint>/pages/{title}/parent` | Retrieve parent metadata and breadcrumb path | ✅ Yes |
+| POST   | `/endpoint/<endpoint>/pages` | Create a new page under root or a specified parent title. Accepts Markdown input. | ✅ Yes |
+| POST   | `/endpoint/<endpoint>/pages/{title}/move` | Move a page beneath a new parent title (circular moves blocked) | ✅ Yes |
+| PUT    | `/endpoint/<endpoint>/pages/{title}` | Update a page. Submit **full** content. Accepts Markdown input. | ✅ Yes |
+| POST   | `/endpoint/<endpoint>/pages/rename` | Rename a page from one title to another | ✅ Yes |
+| GET    | `/endpoint/<endpoint>/openapi.json` | Dynamic OpenAPI schema for GPT tooling | ❌ No |
+| GET    | `/endpoint/<endpoint>/health` | Health check | ❌ No |
 
 ## 📦 Standard Response Envelope
 
@@ -111,7 +116,7 @@ Key fields:
 | Field | Description |
 |-------|-------------|
 | `success` | Boolean indicating whether the operation succeeded. |
-| `code` | Machine-readable status string (`OK`, `INVALID_INPUT`, `NOT_FOUND`, `VERSION_CONFLICT`, `UNAUTHORIZED`, `INTERNAL_ERROR`). |
+| `code` | Machine-readable status string (`OK`, `INVALID_INPUT`, `NOT_FOUND`, `VERSION_CONFLICT`, `INVALID_OPERATION`, `UNAUTHORIZED`, `INTERNAL_ERROR`). |
 | `message` | Human-oriented summary of the outcome. |
 | `data` | Operation-specific payload on success; `null` on failures. |
 | `timestamp` | Server-side ISO 8601 timestamp for the response. |

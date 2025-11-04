@@ -11,8 +11,8 @@ from flask import Flask, abort
 _API_DESCRIPTION = (
     "REST API bridge between Custom GPTs and a sandboxed Confluence root page. "
     "All requests must be authenticated using a Bearer token (Authorization: Bearer <token>). "
-    "API enables programmatic listing, reading, creation, updating, and renaming of Confluence pages "
-    "under a pre-defined root page."
+    "API enables programmatic listing, reading, creation, updating, moving, and renaming of Confluence pages "
+    "under a pre-defined root page, including traversal of hierarchical relationships."
 )
 
 BEARER_SECURITY_REQUIREMENT = [{"BearerAuth": []}]
@@ -72,7 +72,7 @@ def _collect_documented_paths(flask_app: Flask) -> Dict[str, Dict[str, Any]]:
 def _build_spec(flask_app: Flask) -> APISpec:
     spec = APISpec(
         title="Conflagent API",
-        version="2.3.0",
+        version="2.4.0",
         openapi_version="3.1.0",
         info={"description": _API_DESCRIPTION},
     )

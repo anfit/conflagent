@@ -161,7 +161,7 @@ def test_generate_openapi_spec_includes_routes_and_server_metadata() -> None:
     spec = generate_openapi_spec("alpha", host_url, app)
 
     assert spec["info"]["title"] == "Conflagent API"
-    assert spec["info"]["version"] == "2.3.0"
+    assert spec["info"]["version"] == "2.4.0"
     assert spec["servers"] == [
         {
             "url": "https://example.test/root/endpoint/alpha",

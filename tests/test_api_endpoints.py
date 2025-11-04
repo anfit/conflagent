@@ -4,6 +4,8 @@ import os
 from datetime import datetime
 from unittest.mock import patch, MagicMock
 
+from werkzeug.exceptions import HTTPException
+
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from conflagent import app
 
@@ -65,12 +67,17 @@ def test_read_page_missing(mock_load_config, mock_client_cls, client):
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_create_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
-    mock_client.create_or_update_page.return_value = {"id": "456", "version": 1}
-    response = client.post(f"/endpoint/{endpoint}/pages", json={"title": "some/page", "body": "new content"}, headers=headers)
+    mock_client.create_page.return_value = {"title": "some/page", "version": 1}
+    response = client.post(
+        f"/endpoint/{endpoint}/pages",
+        json={"title": "some/page", "body": "new content", "parentTitle": "Root"},
+        headers=headers,
+    )
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["success"] is True
-    assert payload["data"] == {"id": "456", "version": 1}
+    assert payload["data"] == {"title": "some/page", "version": 1}
+    mock_client.create_page.assert_called_once_with("some/page", "new content", "Root")
 
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
@@ -112,6 +119,192 @@ def test_update_page_missing(mock_load_config, mock_client_cls, client):
     assert response.status_code == 404
     payload = response.get_json()
     assert payload["success"] is False
+    assert payload["code"] == "NOT_FOUND"
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_get_page_tree(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.get_page_tree.return_value = {
+        "title": "Root",
+        "path": ["Root"],
+        "children": [
+            {"title": "Child", "path": ["Root", "Child"], "children": []}
+        ],
+    }
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/tree?depth=3&startTitle=abc",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["title"] == "Root"
+    mock_client.get_page_tree.assert_called_once_with(start_title="abc", depth=3)
+
+
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_get_page_tree_invalid_depth(mock_load_config, client):
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/tree?depth=NaN",
+        headers=headers,
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "INVALID_INPUT"
+
+
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_get_page_tree_negative_depth(mock_load_config, client):
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/tree?depth=-1",
+        headers=headers,
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["code"] == "INVALID_INPUT"
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_list_children(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.get_page_children.return_value = [
+        {"title": "Child", "path": ["Parent", "Child"]},
+        {"title": "Another", "path": ["Parent", "Another"]},
+    ]
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/Parent/children",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"][0]["title"] == "Child"
+    mock_client.get_page_children.assert_called_once_with("Parent")
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_list_children_missing_parent(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    exc = HTTPException("missing")
+    exc.code = 404
+    mock_client.get_page_children.side_effect = exc
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/Missing/children",
+        headers=headers,
+    )
+    assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["code"] == "NOT_FOUND"
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_get_parent_metadata(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.get_page_parent.return_value = {
+        "title": "Parent",
+        "path": ["Root", "Parent", "Child"],
+    }
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/Child/parent",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"]["title"] == "Parent"
+    mock_client.get_page_parent.assert_called_once_with("Child")
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_get_parent_missing(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    exc = HTTPException("missing")
+    exc.code = 404
+    mock_client.get_page_parent.side_effect = exc
+    response = client.get(
+        f"/endpoint/{endpoint}/pages/Missing/parent",
+        headers=headers,
+    )
+    assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["code"] == "NOT_FOUND"
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_move_page(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.move_page.return_value = {
+        "title": "Child",
+        "old_parent_title": "Old",
+        "new_parent_title": "New",
+    }
+    response = client.post(
+        f"/endpoint/{endpoint}/pages/Child/move",
+        json={"newParentTitle": "New"},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {
+        "title": "Child",
+        "oldParentTitle": "Old",
+        "newParentTitle": "New",
+    }
+    mock_client.move_page.assert_called_once_with("Child", "New")
+
+
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_move_page_requires_new_parent(mock_load_config, client):
+    response = client.post(
+        f"/endpoint/{endpoint}/pages/Child/move",
+        json={},
+        headers=headers,
+    )
+    assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["code"] == "INVALID_INPUT"
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_move_page_circular(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    exc = HTTPException("invalid")
+    exc.code = 422
+    mock_client.move_page.side_effect = exc
+    response = client.post(
+        f"/endpoint/{endpoint}/pages/Child/move",
+        json={"newParentTitle": "New"},
+        headers=headers,
+    )
+    assert response.status_code == 422
+    payload = response.get_json()
+    assert payload["code"] == "INVALID_OPERATION"
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_move_page_not_found(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    exc = HTTPException("missing")
+    exc.code = 404
+    mock_client.move_page.side_effect = exc
+    response = client.post(
+        f"/endpoint/{endpoint}/pages/Child/move",
+        json={"newParentTitle": "Missing"},
+        headers=headers,
+    )
+    assert response.status_code == 404
+    payload = response.get_json()
     assert payload["code"] == "NOT_FOUND"
 
 @patch("conflagent.ConfluenceClient")
