@@ -1,6 +1,7 @@
 import pytest
 import sys
 import os
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -198,6 +199,40 @@ def test_health(mock_load_config, client):
     payload = response.get_json()
     assert payload["success"] is True
     assert payload["data"] == {"status": "ok"}
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_internal_error_returns_standard_envelope(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.list_pages.side_effect = RuntimeError("boom")
+
+    response = client.get(f"/endpoint/{endpoint}/pages", headers=headers)
+
+    assert response.status_code == 500
+    payload = response.get_json()
+    assert payload == {
+        "success": False,
+        "code": "INTERNAL_ERROR",
+        "message": "An unexpected error occurred.",
+        "data": None,
+        "timestamp": payload["timestamp"],
+    }
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_timestamp_field_is_iso8601(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.list_pages.return_value = []
+
+    response = client.get(f"/endpoint/{endpoint}/pages", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    timestamp = payload["timestamp"]
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    assert parsed.tzinfo is not None
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_openapi_schema(mock_load_config, client):
