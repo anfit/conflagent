@@ -73,8 +73,10 @@ def _list_pages(config: Dict[str, str]) -> List[str]:
     response = _json_request(config, "GET", "/pages")
     assert response.status_code == 200
     payload = response.json()
-    assert isinstance(payload, list)
-    return [page for page in payload if isinstance(page, str)]
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, list)
+    return [page for page in data if isinstance(page, str)]
 
 
 def _create_page(config: Dict[str, str], title: str, body: str) -> Dict[str, str]:
@@ -86,8 +88,10 @@ def _create_page(config: Dict[str, str], title: str, body: str) -> Dict[str, str
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("message")
-    assert payload.get("id")
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, dict)
+    assert data.get("id")
     return payload
 
 
@@ -96,8 +100,11 @@ def _read_page(config: Dict[str, str], title: str) -> Dict[str, str]:
     response = _json_request(config, "GET", f"/pages/{encoded_title}")
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("title") == title
-    assert "body" in payload
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, dict)
+    assert data.get("title") == title
+    assert "body" in data
     return payload
 
 
@@ -110,7 +117,9 @@ def _update_page(config: Dict[str, str], title: str, body: str) -> Dict[str, str
         json={"body": body},
     )
     assert response.status_code == 200
-    return response.json()
+    payload = response.json()
+    assert payload.get("success") is True
+    return payload
 
 
 def _rename_page(config: Dict[str, str], old_title: str, new_title: str) -> Dict[str, str]:
@@ -122,7 +131,10 @@ def _rename_page(config: Dict[str, str], old_title: str, new_title: str) -> Dict
     )
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("new_title") == new_title
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, dict)
+    assert data.get("newTitle") == new_title
     return payload
 
 
@@ -131,7 +143,7 @@ def _delete_page(config: Dict[str, str], title: str) -> Dict[str, str]:
     response = _json_request(config, "DELETE", f"/pages/{encoded_title}")
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("message")
+    assert payload.get("success") is True
     return payload
 
 
@@ -189,7 +201,8 @@ def test_health_endpoint_reports_ok(dev_config: Dict[str, str]):
     content_type = response.headers.get("Content-Type", "")
     assert "application/json" in content_type
     payload = response.json()
-    assert payload == {"status": "ok"}
+    assert payload.get("success") is True
+    assert payload.get("data") == {"status": "ok"}
 
 
 @pytest.mark.integration
@@ -200,7 +213,9 @@ def test_health_requires_bearer_token(dev_config: Dict[str, str]):
     # successfully and exposes no sensitive payload even without the bearer
     # token.
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    payload = response.json()
+    assert payload.get("success") is True
+    assert payload.get("data") == {"status": "ok"}
 
 
 @pytest.mark.integration
@@ -212,8 +227,10 @@ def test_list_pages_returns_paths(dev_config: Dict[str, str]):
     )
     assert response.status_code == 200
     payload = response.json()
-    assert isinstance(payload, list)
-    for path in payload:
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, list)
+    for path in data:
         assert isinstance(path, str)
         assert path  # paths should not be empty strings
 
@@ -227,6 +244,9 @@ def test_missing_page_returns_404(dev_config: Dict[str, str]):
         timeout=10,
     )
     assert response.status_code == 404
+    payload = response.json()
+    assert payload.get("success") is False
+    assert payload.get("code") == "NOT_FOUND"
 
 
 @pytest.mark.integration
@@ -249,7 +269,9 @@ def test_create_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
     """Creating a sandbox page should store the expected content."""
 
     creation_result = _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
+    assert creation_result.get("success") is True
     assert "created" in creation_result["message"].lower()
+    assert creation_result["data"]["id"]
     assert sandbox_titles.title in _list_pages(dev_config)
 
 
@@ -259,8 +281,9 @@ def test_read_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sandbo
 
     _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
     read_payload = _read_page(dev_config, sandbox_titles.title)
-    assert read_payload["title"] == sandbox_titles.title
-    assert SANDBOX_BODY in read_payload["body"]
+    assert read_payload.get("success") is True
+    assert read_payload["data"]["title"] == sandbox_titles.title
+    assert SANDBOX_BODY in read_payload["data"]["body"]
 
 
 @pytest.mark.integration
@@ -269,9 +292,10 @@ def test_update_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
 
     _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
     update_result = _update_page(dev_config, sandbox_titles.title, SANDBOX_UPDATED_BODY)
-    assert "version" in update_result
+    assert update_result.get("success") is True
+    assert "version" in update_result["data"]
     updated_payload = _read_page(dev_config, sandbox_titles.title)
-    assert "updated successfully" in updated_payload["body"]
+    assert "updated successfully" in updated_payload["data"]["body"]
 
 
 @pytest.mark.integration
@@ -286,7 +310,7 @@ def test_rename_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
     assert sandbox_titles.title not in titles_after_rename
 
     renamed_payload = _read_page(dev_config, sandbox_titles.renamed_title)
-    assert SANDBOX_BODY in renamed_payload["body"]
+    assert SANDBOX_BODY in renamed_payload["data"]["body"]
 
 
 @pytest.mark.integration
@@ -295,5 +319,7 @@ def test_delete_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
 
     _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
     delete_result = _delete_page(dev_config, sandbox_titles.title)
+    assert delete_result.get("success") is True
     assert "deleted" in delete_result["message"].lower()
+    assert delete_result["data"]["deletedTitle"] == sandbox_titles.title
     assert sandbox_titles.title not in _list_pages(dev_config)

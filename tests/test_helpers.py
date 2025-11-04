@@ -64,7 +64,7 @@ def test_update_page():
         with patch.object(ConfluenceClient, "_request", side_effect=[get_response, put_response]):
             result = client.update_page({"id": "999", "title": "TestPage"}, "Updated body")
 
-        assert result == {"message": "Page updated", "version": 2}
+        assert result == {"version": 2}
 
 
 def test_update_page_abort_on_failure():
@@ -169,11 +169,11 @@ def test_create_or_update_page_updates_existing():
         existing_page = {"id": "1", "title": "Page"}
         with patch.object(ConfluenceClient, "resolve_or_create_path", return_value="parent"), patch.object(
             ConfluenceClient, "get_page_by_title", return_value=existing_page
-        ), patch.object(ConfluenceClient, "update_page", return_value={"message": "Page updated"}) as mock_update:
+        ), patch.object(ConfluenceClient, "update_page", return_value={"version": 2}) as mock_update:
             result = client.create_or_update_page("Parent/Page", "body")
 
         mock_update.assert_called_once_with(existing_page, "body")
-        assert result == {"message": "Page updated"}
+        assert result == {"id": "1", "version": 2}
 
 
 def test_create_or_update_page_creates_new():
@@ -186,7 +186,7 @@ def test_create_or_update_page_creates_new():
         ), patch.object(ConfluenceClient, "_request", return_value=post_response):
             result = client.create_or_update_page("Parent/NewPage", "body")
 
-        assert result == {"message": "Page created", "id": "99"}
+        assert result == {"id": "99", "version": 1}
 
 
 def test_rename_page_success():
@@ -200,7 +200,7 @@ def test_rename_page_success():
         ):
             result = client.rename_page({"id": "1", "title": "Old"}, "New")
 
-        assert result == {"message": "Page renamed", "version": 2}
+        assert result == {"old_title": "Old", "new_title": "New", "version": 2}
 
 
 def test_rename_page_failure():

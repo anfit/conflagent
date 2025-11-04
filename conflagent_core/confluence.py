@@ -123,7 +123,9 @@ class ConfluenceClient:
         )
         existing = self.get_page_by_title(page_title, parent_id)
         if existing:
-            return self.update_page(existing, body)
+            updated = self.update_page(existing, body)
+            updated["id"] = existing["id"]
+            return updated
 
         payload = {
             "type": "page",
@@ -134,7 +136,15 @@ class ConfluenceClient:
         }
         url = f"{self.base_url}/rest/api/content"
         response = self._request("post", url, json=payload)
-        return {"message": "Page created", "id": response.json()["id"]}
+        response_json = response.json()
+        version_info = response_json.get("version", {})
+        version_number = version_info.get("number")
+        if version_number is None:
+            version_number = 1
+        return {
+            "id": response_json["id"],
+            "version": version_number,
+        }
 
     def update_page(self, page: Dict[str, Any], new_body: str) -> Dict[str, Any]:
         url = f"{self.base_url}/rest/api/content/{page['id']}?expand=version"
@@ -150,7 +160,7 @@ class ConfluenceClient:
         }
         url = f"{self.base_url}/rest/api/content/{page['id']}"
         self._request("put", url, json=payload)
-        return {"message": "Page updated", "version": version}
+        return {"version": version}
 
     def rename_page(self, page: Dict[str, Any], new_title: str) -> Dict[str, Any]:
         url = f"{self.base_url}/rest/api/content/{page['id']}?expand=version"
@@ -168,12 +178,12 @@ class ConfluenceClient:
         }
         url = f"{self.base_url}/rest/api/content/{page['id']}"
         self._request("put", url, json=payload)
-        return {"message": "Page renamed", "version": version}
+        return {"old_title": page["title"], "new_title": new_title, "version": version}
 
     def delete_page(self, page: Dict[str, Any]) -> Dict[str, Any]:
         url = f"{self.base_url}/rest/api/content/{page['id']}"
         response = requests.request("delete", url, headers=self.build_headers())
         if response.status_code not in {200, 202, 204}:
             abort(response.status_code, response.text)
-        return {"message": "Page deleted"}
+        return {"deleted_title": page["title"]}
 

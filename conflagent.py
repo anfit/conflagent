@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any, Dict, Optional
+
 from flask import Flask, abort, g, jsonify, request
+from werkzeug.exceptions import HTTPException
 
 from conflagent_core.auth import check_auth
 from conflagent_core.config import with_config
@@ -12,13 +15,66 @@ from conflagent_core.openapi import (
     document_operation,
     generate_openapi_spec,
 )
+from conflagent_core.response import error_response, success_response
 
 
 app = Flask(__name__)
 
 
+_ERROR_CODE_BY_STATUS: Dict[int, str] = {
+    400: "INVALID_INPUT",
+    401: "UNAUTHORIZED",
+    403: "UNAUTHORIZED",
+    404: "NOT_FOUND",
+    409: "VERSION_CONFLICT",
+    500: "INTERNAL_ERROR",
+}
+
+
+def _map_error_code(status_code: int) -> str:
+    return _ERROR_CODE_BY_STATUS.get(status_code, "INTERNAL_ERROR")
+
+
+def _success(message: str, data: Optional[Any] = None, *, code: str = "OK", status_code: int = 200):
+    return success_response(message, data, code=code, status_code=status_code)
+
+
+def _response_schema(data_schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    schema: Dict[str, Any] = {
+        "type": "object",
+        "required": ["success", "code", "message", "timestamp"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "code": {"type": "string"},
+            "message": {"type": "string"},
+            "timestamp": {"type": "string", "format": "date-time"},
+        },
+    }
+
+    if data_schema is None:
+        schema["properties"]["data"] = {"type": "null"}
+    else:
+        schema["properties"]["data"] = {
+            "oneOf": [data_schema, {"type": "null"}],
+        }
+
+    return schema
+
+
 def _get_client() -> ConfluenceClient:
     return ConfluenceClient(g.config)
+
+
+@app.errorhandler(HTTPException)
+def _handle_http_exception(exc: HTTPException):  # pragma: no cover - behaviour asserted in tests
+    message = exc.description or exc.name
+    code = _map_error_code(exc.code)
+    return error_response(code, message, status_code=exc.code)
+
+
+@app.errorhandler(Exception)
+def _handle_unexpected_exception(exc: Exception):  # pragma: no cover - behaviour asserted in tests
+    return error_response("INTERNAL_ERROR", "An unexpected error occurred.", status_code=500)
 
 
 @app.route("/endpoint/<endpoint_name>/pages", methods=["GET"])
@@ -38,10 +94,13 @@ def _get_client() -> ConfluenceClient:
             "description": "List of subpages",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    }
+                    "schema": _response_schema(
+                        {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "List of subpage paths",
+                        }
+                    )
                 }
             },
         },
@@ -51,7 +110,8 @@ def _get_client() -> ConfluenceClient:
 def api_list_subpages(endpoint_name: str):  # pragma: no cover - exercised via tests
     check_auth()
     client = _get_client()
-    return jsonify(client.list_pages())
+    pages = client.list_pages()
+    return _success("Subpages retrieved.", data=pages)
 
 
 @app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["GET"])
@@ -81,18 +141,21 @@ def api_list_subpages(endpoint_name: str):  # pragma: no cover - exercised via t
             "description": "Page content returned",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "title": {"type": "string"},
-                            "body": {
-                                "type": "string",
-                                "description": (
-                                    "Content in Confluence storage format (HTML-like XML)."
-                                ),
+                    "schema": _response_schema(
+                        {
+                            "type": "object",
+                            "required": ["title", "body"],
+                            "properties": {
+                                "title": {"type": "string"},
+                                "body": {
+                                    "type": "string",
+                                    "description": (
+                                        "Content in Confluence storage format (HTML-like XML)."
+                                    ),
+                                },
                             },
-                        },
-                    }
+                        }
+                    )
                 }
             },
         },
@@ -110,7 +173,10 @@ def api_read_page(endpoint_name: str, title: str):
         abort(404, description="Page not found")
 
     content = client.get_page_body(page["id"])
-    return jsonify({"title": title, "body": content})
+    return _success(
+        "Page retrieved.",
+        data={"title": title, "body": content},
+    )
 
 
 @app.route("/endpoint/<endpoint_name>/pages", methods=["POST"])
@@ -152,13 +218,16 @@ def api_read_page(endpoint_name: str, title: str):
             "description": "Page created successfully",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "message": {"type": "string"},
-                            "id": {"type": "string"},
-                        },
-                    }
+                    "schema": _response_schema(
+                        {
+                            "type": "object",
+                            "required": ["id", "version"],
+                            "properties": {
+                                "id": {"type": "string"},
+                                "version": {"type": "integer"},
+                            },
+                        }
+                    )
                 }
             },
         },
@@ -177,7 +246,9 @@ def api_create_page(endpoint_name: str):
         abort(400, description="Title is required")
 
     client = _get_client()
-    return jsonify(client.create_or_update_page(title, body))
+    result = client.create_or_update_page(title, body)
+    data = {"id": result["id"], "version": result["version"]}
+    return _success("Page created.", data=data)
 
 
 @app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["PUT"])
@@ -229,13 +300,15 @@ def api_create_page(endpoint_name: str):
             "description": "Page updated successfully",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "message": {"type": "string"},
-                            "version": {"type": "integer"},
-                        },
-                    }
+                    "schema": _response_schema(
+                        {
+                            "type": "object",
+                            "required": ["version"],
+                            "properties": {
+                                "version": {"type": "integer"},
+                            },
+                        }
+                    )
                 }
             },
         },
@@ -255,7 +328,8 @@ def api_update_page(endpoint_name: str, title: str):
     if not page:
         abort(404, description="Page not found")
 
-    return jsonify(client.update_page(page, new_body))
+    result = client.update_page(page, new_body)
+    return _success("Page updated.", data={"version": result["version"]})
 
 
 @app.route("/endpoint/<endpoint_name>/pages/<path:title>", methods=["DELETE"])
@@ -283,12 +357,15 @@ def api_update_page(endpoint_name: str, title: str):
             "description": "Page deleted successfully",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "message": {"type": "string"},
-                        },
-                    }
+                    "schema": _response_schema(
+                        {
+                            "type": "object",
+                            "required": ["deletedTitle"],
+                            "properties": {
+                                "deletedTitle": {"type": "string"},
+                            },
+                        }
+                    )
                 }
             },
         },
@@ -306,7 +383,11 @@ def api_delete_page(endpoint_name: str, title: str):
     if not page:
         abort(404, description="Page not found")
 
-    return jsonify(client.delete_page(page))
+    result = client.delete_page(page)
+    return _success(
+        "Page deleted.",
+        data={"deletedTitle": result["deleted_title"]},
+    )
 
 
 @app.route("/endpoint/<endpoint_name>/pages/rename", methods=["POST"])
@@ -342,13 +423,17 @@ def api_delete_page(endpoint_name: str, title: str):
             "description": "Page renamed successfully",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "message": {"type": "string"},
-                            "new_title": {"type": "string"},
-                        },
-                    }
+                    "schema": _response_schema(
+                        {
+                            "type": "object",
+                            "required": ["oldTitle", "newTitle", "version"],
+                            "properties": {
+                                "oldTitle": {"type": "string"},
+                                "newTitle": {"type": "string"},
+                                "version": {"type": "integer"},
+                            },
+                        }
+                    )
                 }
             },
         },
@@ -373,8 +458,12 @@ def api_rename_page(endpoint_name: str):
         abort(404, description="Page not found")
 
     result = client.rename_page(page, new_title)
-    result["new_title"] = new_title
-    return jsonify(result)
+    data = {
+        "oldTitle": result["old_title"],
+        "newTitle": result["new_title"],
+        "version": result["version"],
+    }
+    return _success("Page renamed.", data=data)
 
 
 @app.route("/endpoint/<endpoint_name>/openapi.json", methods=["GET"])
@@ -414,19 +503,25 @@ def openapi_schema(endpoint_name: str):
             "description": "Server is running",
             "content": {
                 "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "status": {"type": "string", "example": "ok"},
-                        },
-                    }
+                    "schema": _response_schema(
+                        {
+                            "type": "object",
+                            "required": ["status"],
+                            "properties": {
+                                "status": {
+                                    "type": "string",
+                                    "example": "ok",
+                                }
+                            },
+                        }
+                    )
                 }
             },
         }
     },
 )
 def api_health(endpoint_name: str):
-    return jsonify({"status": "ok"})
+    return _success("Service healthy.", data={"status": "ok"})
 
 
 if __name__ == "__main__":  # pragma: no cover - manual execution only

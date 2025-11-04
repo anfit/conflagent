@@ -72,7 +72,7 @@ def _collect_documented_paths(flask_app: Flask) -> Dict[str, Dict[str, Any]]:
 def _build_spec(flask_app: Flask) -> APISpec:
     spec = APISpec(
         title="Conflagent API",
-        version="2.2.0",
+        version="2.3.0",
         openapi_version="3.1.0",
         info={"description": _API_DESCRIPTION},
     )
