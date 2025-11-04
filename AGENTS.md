@@ -26,3 +26,4 @@ These instructions apply to the entire repository unless a nested `AGENTS.md` ov
 ## Documentation & Miscellaneous
 - Document externally visible behavioural changes in `README.md` or other relevant markdown files.
 - Do not introduce print-based debugging in committed code; rely on logging or tests instead.
+- Format commit messages with a standard prefix (`feat:`, `fix:`, `chore:`, `refactor:`, or `tests:`) followed by a capitalised, imperative-style summary.
