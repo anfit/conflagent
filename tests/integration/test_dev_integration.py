@@ -17,12 +17,11 @@ REQUIRED_ENV_VARS = {
 }
 
 SANDBOX_PREFIX = "SANDBOX_"
+CLEANED_PREFIX = "CLEANED_SANDBOX_"
 SANDBOX_BODY = "# Sandbox Test Page\nThis is a test page created automatically."
 SANDBOX_UPDATED_BODY = (
     "# Sandbox Test Page (Updated)\nThis page has been updated successfully."
 )
-CLEANED_PREFIX = "CLEANED_SANDBOX_"
-PLACEHOLDER_BODY = "# Test Cleanup Placeholder\nThis page was archived by the test suite."
 
 
 @dataclass
@@ -127,13 +126,19 @@ def _rename_page(config: Dict[str, str], old_title: str, new_title: str) -> Dict
     return payload
 
 
+def _delete_page(config: Dict[str, str], title: str) -> Dict[str, str]:
+    encoded_title = quote(title, safe="")
+    response = _json_request(config, "DELETE", f"/pages/{encoded_title}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("message")
+    return payload
+
+
 def _cleanup_existing_sandbox_pages(config: Dict[str, str], titles: Iterable[str]) -> None:
-    for index, title in enumerate(titles):
-        if not title.startswith(SANDBOX_PREFIX):
-            continue
-        cleanup_title = f"{CLEANED_PREFIX}{int(time.time())}_{index}"
-        _rename_page(config, title, cleanup_title)
-        _update_page(config, cleanup_title, PLACEHOLDER_BODY)
+    for title in titles:
+        if title.startswith(SANDBOX_PREFIX) or title.startswith(CLEANED_PREFIX):
+            _delete_page(config, title)
 
 
 def _ensure_no_sandbox_titles(titles: Iterable[str]) -> None:
@@ -141,18 +146,15 @@ def _ensure_no_sandbox_titles(titles: Iterable[str]) -> None:
     assert not leftovers, f"Unexpected sandbox titles lingering: {leftovers}"
 
 
-def _archive_titles(config: Dict[str, str], *titles: str) -> None:
-    """Rename sandbox titles to a cleaned placeholder if they still exist."""
+def _remove_titles(config: Dict[str, str], *titles: str) -> None:
+    """Delete sandbox titles if they still exist."""
 
-    timestamp = int(time.time())
-    for index, title in enumerate(titles):
+    for title in titles:
         if not title:
             continue
         current_titles = set(_list_pages(config))
         if title in current_titles:
-            final_title = f"{CLEANED_PREFIX}{timestamp}_{index}_{uuid.uuid4().hex[:6]}"
-            _rename_page(config, title, final_title)
-            _update_page(config, final_title, PLACEHOLDER_BODY)
+            _delete_page(config, title)
 
 
 @pytest.fixture
@@ -172,7 +174,7 @@ def sandbox_titles(dev_config: Dict[str, str]) -> SandboxTitles:
     try:
         yield titles
     finally:
-        _archive_titles(dev_config, titles.renamed_title, titles.title)
+        _remove_titles(dev_config, titles.renamed_title, titles.title)
         _ensure_no_sandbox_titles(_list_pages(dev_config))
 
 
@@ -285,3 +287,13 @@ def test_rename_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
 
     renamed_payload = _read_page(dev_config, sandbox_titles.renamed_title)
     assert SANDBOX_BODY in renamed_payload["body"]
+
+
+@pytest.mark.integration
+def test_delete_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: SandboxTitles):
+    """Deleting a sandbox page should remove it from the listings."""
+
+    _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
+    delete_result = _delete_page(dev_config, sandbox_titles.title)
+    assert "deleted" in delete_result["message"].lower()
+    assert sandbox_titles.title not in _list_pages(dev_config)

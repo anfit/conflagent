@@ -95,6 +95,30 @@ def test_update_page_missing(mock_load_config, mock_client_cls, client):
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_delete_page(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.get_page_by_path.return_value = {"id": "999", "title": "some/page"}
+    mock_client.delete_page.return_value = {"message": "Page deleted"}
+    response = client.delete(
+        f"/endpoint/{endpoint}/pages/some/page",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.get_json() == {"message": "Page deleted"}
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_delete_page_missing(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.get_page_by_path.return_value = None
+    response = client.delete(
+        f"/endpoint/{endpoint}/pages/missing",
+        headers=headers,
+    )
+    assert response.status_code == 404
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_rename_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
     mock_client.get_page_by_path.return_value = {"id": "111", "title": "old/page"}

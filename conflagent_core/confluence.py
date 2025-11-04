@@ -170,3 +170,10 @@ class ConfluenceClient:
         self._request("put", url, json=payload)
         return {"message": "Page renamed", "version": version}
 
+    def delete_page(self, page: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"{self.base_url}/rest/api/content/{page['id']}"
+        response = requests.request("delete", url, headers=self.build_headers())
+        if response.status_code not in {200, 202, 204}:
+            abort(response.status_code, response.text)
+        return {"message": "Page deleted"}
+
