@@ -1,6 +1,7 @@
 import pytest
 import sys
 import os
+from datetime import datetime
 from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -30,7 +31,11 @@ def test_list_pages(mock_load_config, mock_client_cls, client):
     mock_client.list_pages.return_value = ["Path1/PageA", "Path2/PageB"]
     response = client.get(f"/endpoint/{endpoint}/pages", headers=headers)
     assert response.status_code == 200
-    assert response.get_json() == ["Path1/PageA", "Path2/PageB"]
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["code"] == "OK"
+    assert payload["data"] == ["Path1/PageA", "Path2/PageB"]
+    assert "timestamp" in payload
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
@@ -40,7 +45,9 @@ def test_read_page(mock_load_config, mock_client_cls, client):
     mock_client.get_page_body.return_value = "Test content"
     response = client.get(f"/endpoint/{endpoint}/pages/some/page", headers=headers)
     assert response.status_code == 200
-    assert response.get_json() == {"title": "some/page", "body": "Test content"}
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {"title": "some/page", "body": "Test content"}
 
 
 @patch("conflagent.ConfluenceClient")
@@ -50,15 +57,20 @@ def test_read_page_missing(mock_load_config, mock_client_cls, client):
     mock_client.get_page_by_path.return_value = None
     response = client.get(f"/endpoint/{endpoint}/pages/missing", headers=headers)
     assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "NOT_FOUND"
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_create_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
-    mock_client.create_or_update_page.return_value = {"message": "Page created", "id": "456"}
+    mock_client.create_or_update_page.return_value = {"id": "456", "version": 1}
     response = client.post(f"/endpoint/{endpoint}/pages", json={"title": "some/page", "body": "new content"}, headers=headers)
     assert response.status_code == 200
-    assert response.get_json() == {"message": "Page created", "id": "456"}
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {"id": "456", "version": 1}
 
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
@@ -69,16 +81,22 @@ def test_create_page_requires_title(mock_load_config, client):
         headers=headers,
     )
     assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "INVALID_INPUT"
+    assert "Title is required" in payload["message"]
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_update_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
     mock_client.get_page_by_path.return_value = {"id": "789", "title": "some/page"}
-    mock_client.update_page.return_value = {"message": "Page updated", "version": 2}
+    mock_client.update_page.return_value = {"version": 2}
     response = client.put(f"/endpoint/{endpoint}/pages/some/page", json={"body": "updated content"}, headers=headers)
     assert response.status_code == 200
-    assert response.get_json() == {"message": "Page updated", "version": 2}
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {"version": 2}
 
 
 @patch("conflagent.ConfluenceClient")
@@ -92,19 +110,24 @@ def test_update_page_missing(mock_load_config, mock_client_cls, client):
         headers=headers,
     )
     assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "NOT_FOUND"
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_delete_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
     mock_client.get_page_by_path.return_value = {"id": "999", "title": "some/page"}
-    mock_client.delete_page.return_value = {"message": "Page deleted"}
+    mock_client.delete_page.return_value = {"deleted_title": "some/page"}
     response = client.delete(
         f"/endpoint/{endpoint}/pages/some/page",
         headers=headers,
     )
     assert response.status_code == 200
-    assert response.get_json() == {"message": "Page deleted"}
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {"deletedTitle": "some/page"}
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
@@ -116,16 +139,29 @@ def test_delete_page_missing(mock_load_config, mock_client_cls, client):
         headers=headers,
     )
     assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "NOT_FOUND"
 
 @patch("conflagent.ConfluenceClient")
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_rename_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
     mock_client.get_page_by_path.return_value = {"id": "111", "title": "old/page"}
-    mock_client.rename_page.return_value = {"message": "Page renamed", "version": 2}
+    mock_client.rename_page.return_value = {
+        "old_title": "old/page",
+        "new_title": "new/page",
+        "version": 2,
+    }
     response = client.post(f"/endpoint/{endpoint}/pages/rename", json={"old_title": "old/page", "new_title": "new/page"}, headers=headers)
     assert response.status_code == 200
-    assert response.get_json() == {"message": "Page renamed", "new_title": "new/page", "version": 2}
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {
+        "oldTitle": "old/page",
+        "newTitle": "new/page",
+        "version": 2,
+    }
 
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
@@ -136,6 +172,9 @@ def test_rename_page_requires_fields(mock_load_config, client):
         headers=headers,
     )
     assert response.status_code == 400
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "INVALID_INPUT"
 
 
 @patch("conflagent.ConfluenceClient")
@@ -149,12 +188,51 @@ def test_rename_page_missing_source(mock_load_config, mock_client_cls, client):
         headers=headers,
     )
     assert response.status_code == 404
+    payload = response.get_json()
+    assert payload["success"] is False
+    assert payload["code"] == "NOT_FOUND"
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_health(mock_load_config, client):
     response = client.get(f"/endpoint/{endpoint}/health")
     assert response.status_code == 200
-    assert response.get_json()["status"] == "ok"
+    payload = response.get_json()
+    assert payload["success"] is True
+    assert payload["data"] == {"status": "ok"}
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_internal_error_returns_standard_envelope(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.list_pages.side_effect = RuntimeError("boom")
+
+    response = client.get(f"/endpoint/{endpoint}/pages", headers=headers)
+
+    assert response.status_code == 500
+    payload = response.get_json()
+    assert payload == {
+        "success": False,
+        "code": "INTERNAL_ERROR",
+        "message": "An unexpected error occurred.",
+        "data": None,
+        "timestamp": payload["timestamp"],
+    }
+
+
+@patch("conflagent.ConfluenceClient")
+@patch("conflagent_core.config.load_config", return_value=mock_config)
+def test_timestamp_field_is_iso8601(mock_load_config, mock_client_cls, client):
+    mock_client = mock_client_cls.return_value
+    mock_client.list_pages.return_value = []
+
+    response = client.get(f"/endpoint/{endpoint}/pages", headers=headers)
+
+    assert response.status_code == 200
+    payload = response.get_json()
+    timestamp = payload["timestamp"]
+    parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+    assert parsed.tzinfo is not None
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_openapi_schema(mock_load_config, client):

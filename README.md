@@ -92,6 +92,32 @@ GPT tool calls must include this to access or modify Confluence content. The sec
 | GET    | `/endpoint/<endpoint>/openapi.json`         | Dynamic OpenAPI schema for GPT tooling                                           | ❌ No           |
 | GET    | `/endpoint/<endpoint>/health`               | Health check                                                                     | ❌ No           |
 
+## 📦 Standard Response Envelope
+
+Every REST call now returns a structured envelope that is easy for GPT agents and other clients to parse consistently:
+
+```
+{
+  "success": true,
+  "code": "OK",
+  "message": "Operation completed successfully.",
+  "data": { /* endpoint-specific payload */ },
+  "timestamp": "2025-11-04T09:20:31Z"
+}
+```
+
+Key fields:
+
+| Field | Description |
+|-------|-------------|
+| `success` | Boolean indicating whether the operation succeeded. |
+| `code` | Machine-readable status string (`OK`, `INVALID_INPUT`, `NOT_FOUND`, `VERSION_CONFLICT`, `UNAUTHORIZED`, `INTERNAL_ERROR`). |
+| `message` | Human-oriented summary of the outcome. |
+| `data` | Operation-specific payload on success; `null` on failures. |
+| `timestamp` | Server-side ISO 8601 timestamp for the response. |
+
+Error responses return `success: false`, populate `code` with one of the values listed above, include a descriptive `message`, and set `data` to `null`.
+
 ## 🤖 GPT Integration Guide
 
 To integrate this API with a Custom GPT:
