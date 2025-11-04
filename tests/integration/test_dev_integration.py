@@ -1,6 +1,8 @@
 """Integration tests hitting the dev deployment."""
 import os
 import time
+import uuid
+from dataclasses import dataclass
 from typing import Dict, Iterable, List
 from urllib.parse import quote
 
@@ -15,14 +17,20 @@ REQUIRED_ENV_VARS = {
 }
 
 SANDBOX_PREFIX = "SANDBOX_"
-SANDBOX_TITLE = "SANDBOX_TestPage_001"
 SANDBOX_BODY = "# Sandbox Test Page\nThis is a test page created automatically."
 SANDBOX_UPDATED_BODY = (
     "# Sandbox Test Page (Updated)\nThis page has been updated successfully."
 )
-SANDBOX_RENAMED_TITLE = f"{SANDBOX_TITLE}_RENAMED"
 CLEANED_PREFIX = "CLEANED_SANDBOX_"
 PLACEHOLDER_BODY = "# Test Cleanup Placeholder\nThis page was archived by the test suite."
+
+
+@dataclass
+class SandboxTitles:
+    """Container for sandbox titles used within a single test."""
+
+    title: str
+    renamed_title: str
 
 
 @pytest.fixture(scope="session")
@@ -133,6 +141,41 @@ def _ensure_no_sandbox_titles(titles: Iterable[str]) -> None:
     assert not leftovers, f"Unexpected sandbox titles lingering: {leftovers}"
 
 
+def _archive_titles(config: Dict[str, str], *titles: str) -> None:
+    """Rename sandbox titles to a cleaned placeholder if they still exist."""
+
+    timestamp = int(time.time())
+    for index, title in enumerate(titles):
+        if not title:
+            continue
+        current_titles = set(_list_pages(config))
+        if title in current_titles:
+            final_title = f"{CLEANED_PREFIX}{timestamp}_{index}_{uuid.uuid4().hex[:6]}"
+            _rename_page(config, title, final_title)
+            _update_page(config, final_title, PLACEHOLDER_BODY)
+
+
+@pytest.fixture
+def sandbox_titles(dev_config: Dict[str, str]) -> SandboxTitles:
+    """Provide unique sandbox titles and guarantee cleanup for each test."""
+
+    existing_titles = _list_pages(dev_config)
+    _cleanup_existing_sandbox_pages(dev_config, existing_titles)
+    _ensure_no_sandbox_titles(_list_pages(dev_config))
+
+    unique_suffix = uuid.uuid4().hex[:8]
+    base_title = f"{SANDBOX_PREFIX}TestPage_{unique_suffix}"
+    renamed_title = f"{base_title}_RENAMED"
+
+    titles = SandboxTitles(title=base_title, renamed_title=renamed_title)
+
+    try:
+        yield titles
+    finally:
+        _archive_titles(dev_config, titles.renamed_title, titles.title)
+        _ensure_no_sandbox_titles(_list_pages(dev_config))
+
+
 @pytest.mark.integration
 def test_health_endpoint_reports_ok(dev_config: Dict[str, str]):
     response = requests.get(
@@ -200,58 +243,45 @@ def test_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
 
 
 @pytest.mark.integration
-def test_conflagent_operator_sandbox_cycle(dev_config: Dict[str, str]):
-    """Exercise the full sandbox lifecycle of the Conflagent operator."""
+def test_create_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: SandboxTitles):
+    """Creating a sandbox page should store the expected content."""
 
-    # Step 0 — Pre-cleanup: rename/archive any lingering sandbox pages.
-    existing_titles = _list_pages(dev_config)
-    _cleanup_existing_sandbox_pages(dev_config, existing_titles)
-    _ensure_no_sandbox_titles(_list_pages(dev_config))
+    creation_result = _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
+    assert "created" in creation_result["message"].lower()
+    assert sandbox_titles.title in _list_pages(dev_config)
 
-    # Step 1 — Health Check
-    response = requests.get(
-        _full_url(dev_config, "/health"),
-        headers=_auth_headers(dev_config["token"]),
-        timeout=10,
-    )
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
 
-    # Steps 2-6 execute in a try/finally to guarantee cleanup.
-    created_title = SANDBOX_TITLE
-    renamed_title = SANDBOX_RENAMED_TITLE
-    final_title = f"{CLEANED_PREFIX}{int(time.time())}_final"
+@pytest.mark.integration
+def test_read_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: SandboxTitles):
+    """A created sandbox page should be readable with the original body."""
 
-    try:
-        # Step 2 — Create a Page
-        creation_result = _create_page(dev_config, created_title, SANDBOX_BODY)
-        assert "created" in creation_result["message"].lower()
+    _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
+    read_payload = _read_page(dev_config, sandbox_titles.title)
+    assert read_payload["title"] == sandbox_titles.title
+    assert SANDBOX_BODY in read_payload["body"]
 
-        # Step 3 — Read the Page
-        read_payload = _read_page(dev_config, created_title)
-        assert "This is a test page created automatically." in read_payload["body"]
 
-        # Step 4 — Update the Page
-        update_result = _update_page(dev_config, created_title, SANDBOX_UPDATED_BODY)
-        assert "version" in update_result
-        updated_payload = _read_page(dev_config, created_title)
-        assert "This page has been updated successfully." in updated_payload["body"]
+@pytest.mark.integration
+def test_update_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: SandboxTitles):
+    """Updating a sandbox page should increment the version and body content."""
 
-        # Step 5 — Rename the Page
-        _rename_page(dev_config, created_title, renamed_title)
-        titles_after_rename = _list_pages(dev_config)
-        assert renamed_title in titles_after_rename
-        assert created_title not in titles_after_rename
+    _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
+    update_result = _update_page(dev_config, sandbox_titles.title, SANDBOX_UPDATED_BODY)
+    assert "version" in update_result
+    updated_payload = _read_page(dev_config, sandbox_titles.title)
+    assert "updated successfully" in updated_payload["body"]
 
-    finally:
-        # Step 6 — Post-cleanup
-        # TODO: replace with a dedicated delete endpoint when available.
-        current_titles = _list_pages(dev_config)
-        if renamed_title in current_titles:
-            _rename_page(dev_config, renamed_title, final_title)
-            _update_page(dev_config, final_title, PLACEHOLDER_BODY)
-        elif created_title in current_titles:
-            _rename_page(dev_config, created_title, final_title)
-            _update_page(dev_config, final_title, PLACEHOLDER_BODY)
 
-    _ensure_no_sandbox_titles(_list_pages(dev_config))
+@pytest.mark.integration
+def test_rename_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: SandboxTitles):
+    """Renaming a sandbox page should move it to the new title and keep content."""
+
+    _create_page(dev_config, sandbox_titles.title, SANDBOX_BODY)
+    _rename_page(dev_config, sandbox_titles.title, sandbox_titles.renamed_title)
+
+    titles_after_rename = _list_pages(dev_config)
+    assert sandbox_titles.renamed_title in titles_after_rename
+    assert sandbox_titles.title not in titles_after_rename
+
+    renamed_payload = _read_page(dev_config, sandbox_titles.renamed_title)
+    assert SANDBOX_BODY in renamed_payload["body"]
