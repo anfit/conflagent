@@ -67,7 +67,7 @@ def test_read_page_missing(mock_load_config, mock_client_cls, client):
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_create_page(mock_load_config, mock_client_cls, client):
     mock_client = mock_client_cls.return_value
-    mock_client.create_page.return_value = {"title": "some/page", "version": 1}
+    mock_client.create_page.return_value = {"id": "123", "title": "some/page", "version": 1}
     response = client.post(
         f"/endpoint/{endpoint}/pages",
         json={"title": "some/page", "body": "new content", "parentTitle": "Root"},
@@ -76,7 +76,7 @@ def test_create_page(mock_load_config, mock_client_cls, client):
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["success"] is True
-    assert payload["data"] == {"title": "some/page", "version": 1}
+    assert payload["data"] == {"id": "123", "title": "some/page", "version": 1}
     mock_client.create_page.assert_called_once_with("some/page", "new content", "Root")
 
 

@@ -416,12 +416,13 @@ def api_read_page(endpoint_name: str, title: str):
                     "schema": _response_schema(
                         {
                             "type": "object",
-                    "required": ["title", "version"],
-                    "properties": {
-                        "title": {"type": "string"},
-                        "version": {"type": "integer"},
-                    },
-                }
+                            "required": ["id", "title", "version"],
+                            "properties": {
+                                "id": {"type": "string"},
+                                "title": {"type": "string"},
+                                "version": {"type": "integer"},
+                            },
+                        }
                     )
                 }
             },
@@ -443,7 +444,7 @@ def api_create_page(endpoint_name: str):
 
     client = _get_client()
     result = client.create_page(title, body, parent_title)
-    data = {"title": result["title"], "version": result["version"]}
+    data = {"id": result["id"], "title": result["title"], "version": result["version"]}
     return _success("Page created.", data=data)
 
 

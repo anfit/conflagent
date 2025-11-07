@@ -197,7 +197,7 @@ def test_create_page_defaults_to_root_parent():
         with patch.object(ConfluenceClient, "_request", return_value=post_response) as mock_request:
             result = client.create_page("Title", "body", None)
 
-        assert result == {"title": "Title", "version": 3}
+        assert result == {"id": "42", "title": "Title", "version": 3}
         called_args, called_kwargs = mock_request.call_args
         assert called_args[0] == "post"
         assert "rest/api/content" in called_args[1]
@@ -218,7 +218,7 @@ def test_create_page_with_parent_title():
         mock_lookup.assert_called_once_with("Parent")
         called_args, called_kwargs = mock_request.call_args
         assert called_kwargs["json"]["ancestors"] == [{"id": "parent"}]
-        assert result == {"title": "Child", "version": 5}
+        assert result == {"id": "77", "title": "Child", "version": 5}
 
 
 def test_get_page_children_returns_minimal_payload():

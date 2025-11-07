@@ -245,9 +245,10 @@ class ConfluenceClient:
         url = f"{self.base_url}/rest/api/content"
         response = self._request("post", url, json=payload)
         response_json = response.json()
+        page_id = response_json.get("id")
         version_info = response_json.get("version", {})
         version_number = version_info.get("number", 1)
-        return {"title": title, "version": version_number}
+        return {"id": page_id, "title": title, "version": version_number}
 
     def move_page(self, page_title: str, new_parent_title: str) -> Dict[str, Any]:
         page = self._ensure_page_by_title(page_title, expand="version")
