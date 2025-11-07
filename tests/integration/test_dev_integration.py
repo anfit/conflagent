@@ -3,7 +3,7 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import quote
 
 import pytest
@@ -30,6 +30,15 @@ class SandboxTitles:
 
     title: str
     renamed_title: str
+
+
+@dataclass
+class HierarchyTitles:
+    """Grouping of titles used when exercising hierarchy endpoints."""
+
+    parent: str
+    child: str
+    new_parent: str
 
 
 @pytest.fixture(scope="session")
@@ -85,6 +94,24 @@ def _create_page(config: Dict[str, str], title: str, body: str) -> Dict[str, str
         "POST",
         "/pages",
         json={"title": title, "body": body},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, dict)
+    assert data.get("id")
+    return payload
+
+
+def _create_page_under_parent(
+    config: Dict[str, str], title: str, body: str, parent_title: str
+) -> Dict[str, str]:
+    response = _json_request(
+        config,
+        "POST",
+        "/pages",
+        json={"title": title, "body": body, "parentTitle": parent_title},
     )
     assert response.status_code == 200
     payload = response.json()
@@ -169,6 +196,69 @@ def _remove_titles(config: Dict[str, str], *titles: str) -> None:
             _delete_page(config, title)
 
 
+def _encode_title(title: str) -> str:
+    return quote(title, safe="")
+
+
+def _get_children(config: Dict[str, str], title: str) -> List[Dict[str, Any]]:
+    encoded_title = _encode_title(title)
+    response = _json_request(config, "GET", f"/pages/{encoded_title}/children")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, list)
+    return [item for item in data if isinstance(item, dict)]
+
+
+def _get_parent(config: Dict[str, str], title: str) -> Optional[Dict[str, Any]]:
+    encoded_title = _encode_title(title)
+    response = _json_request(config, "GET", f"/pages/{encoded_title}/parent")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("success") is True
+    return payload.get("data")
+
+
+def _get_tree(
+    config: Dict[str, str], *, start_title: Optional[str] = None, depth: Optional[int] = None
+) -> Dict[str, Any]:
+    query_params: List[str] = []
+    if depth is not None:
+        query_params.append(f"depth={depth}")
+    if start_title:
+        query_params.append(f"startTitle={_encode_title(start_title)}")
+    query = "&".join(query_params)
+    path = "/pages/tree"
+    if query:
+        path = f"{path}?{query}"
+    response = _json_request(config, "GET", path)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, dict)
+    return data
+
+
+def _move_page_to_parent(
+    config: Dict[str, str], title: str, new_parent_title: str
+) -> Dict[str, Any]:
+    encoded_title = _encode_title(title)
+    response = _json_request(
+        config,
+        "POST",
+        f"/pages/{encoded_title}/move",
+        json={"newParentTitle": new_parent_title},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload.get("success") is True
+    data = payload.get("data")
+    assert isinstance(data, dict)
+    return data
+
+
 @pytest.fixture
 def sandbox_titles(dev_config: Dict[str, str]) -> SandboxTitles:
     """Provide unique sandbox titles and guarantee cleanup for each test."""
@@ -187,6 +277,28 @@ def sandbox_titles(dev_config: Dict[str, str]) -> SandboxTitles:
         yield titles
     finally:
         _remove_titles(dev_config, titles.renamed_title, titles.title)
+        _ensure_no_sandbox_titles(_list_pages(dev_config))
+
+
+@pytest.fixture
+def hierarchy_titles(dev_config: Dict[str, str]) -> HierarchyTitles:
+    """Provide unique titles for exercising hierarchy endpoints."""
+
+    existing_titles = _list_pages(dev_config)
+    _cleanup_existing_sandbox_pages(dev_config, existing_titles)
+    _ensure_no_sandbox_titles(_list_pages(dev_config))
+
+    unique_suffix = uuid.uuid4().hex[:8]
+    parent = f"{SANDBOX_PREFIX}TreeParent_{unique_suffix}"
+    child = f"{parent}_Child"
+    new_parent = f"{SANDBOX_PREFIX}TreeNewParent_{unique_suffix}"
+
+    titles = HierarchyTitles(parent=parent, child=child, new_parent=new_parent)
+
+    try:
+        yield titles
+    finally:
+        _remove_titles(dev_config, titles.child, titles.new_parent, titles.parent)
         _ensure_no_sandbox_titles(_list_pages(dev_config))
 
 
@@ -323,3 +435,96 @@ def test_delete_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
     assert "deleted" in delete_result["message"].lower()
     assert delete_result["data"]["deletedTitle"] == sandbox_titles.title
     assert sandbox_titles.title not in _list_pages(dev_config)
+
+
+@pytest.mark.integration
+def test_page_tree_includes_child_hierarchy(
+    dev_config: Dict[str, str], hierarchy_titles: HierarchyTitles
+):
+    """A created parent/child structure should appear in the tree response."""
+
+    _create_page(dev_config, hierarchy_titles.parent, SANDBOX_BODY)
+    _create_page_under_parent(
+        dev_config, hierarchy_titles.child, SANDBOX_BODY, hierarchy_titles.parent
+    )
+
+    tree = _get_tree(dev_config, start_title=hierarchy_titles.parent, depth=1)
+    assert tree["title"] == hierarchy_titles.parent
+    assert tree["path"][-1] == hierarchy_titles.parent
+
+    child_nodes = [
+        node for node in tree.get("children", []) if node.get("title") == hierarchy_titles.child
+    ]
+    assert child_nodes, "Expected child title to appear beneath parent in tree"
+    child_node = child_nodes[0]
+    assert child_node.get("path", [])[-2:] == [
+        hierarchy_titles.parent,
+        hierarchy_titles.child,
+    ]
+
+
+@pytest.mark.integration
+def test_children_endpoint_lists_direct_children(
+    dev_config: Dict[str, str], hierarchy_titles: HierarchyTitles
+):
+    """Listing children should include direct descendants with their paths."""
+
+    _create_page(dev_config, hierarchy_titles.parent, SANDBOX_BODY)
+    _create_page_under_parent(
+        dev_config, hierarchy_titles.child, SANDBOX_BODY, hierarchy_titles.parent
+    )
+
+    children = _get_children(dev_config, hierarchy_titles.parent)
+    titles = [child.get("title") for child in children]
+    assert hierarchy_titles.child in titles
+    child_entry = next(child for child in children if child.get("title") == hierarchy_titles.child)
+    assert child_entry.get("path", [])[-2:] == [
+        hierarchy_titles.parent,
+        hierarchy_titles.child,
+    ]
+
+
+@pytest.mark.integration
+def test_parent_endpoint_returns_parent_metadata(
+    dev_config: Dict[str, str], hierarchy_titles: HierarchyTitles
+):
+    """Parent lookup should return the direct ancestor metadata and breadcrumb path."""
+
+    _create_page(dev_config, hierarchy_titles.parent, SANDBOX_BODY)
+    _create_page_under_parent(
+        dev_config, hierarchy_titles.child, SANDBOX_BODY, hierarchy_titles.parent
+    )
+
+    parent = _get_parent(dev_config, hierarchy_titles.child)
+    assert parent is not None
+    assert parent.get("title") == hierarchy_titles.parent
+    assert parent.get("path", [])[-2:] == [
+        hierarchy_titles.parent,
+        hierarchy_titles.child,
+    ]
+
+
+@pytest.mark.integration
+def test_move_page_reparents_child(
+    dev_config: Dict[str, str], hierarchy_titles: HierarchyTitles
+):
+    """Moving a child page should update its parent and visibility in listings."""
+
+    _create_page(dev_config, hierarchy_titles.parent, SANDBOX_BODY)
+    _create_page(dev_config, hierarchy_titles.new_parent, SANDBOX_BODY)
+    _create_page_under_parent(
+        dev_config, hierarchy_titles.child, SANDBOX_BODY, hierarchy_titles.parent
+    )
+
+    move_result = _move_page_to_parent(
+        dev_config, hierarchy_titles.child, hierarchy_titles.new_parent
+    )
+    assert move_result.get("title") == hierarchy_titles.child
+    assert move_result.get("oldParentTitle") == hierarchy_titles.parent
+    assert move_result.get("newParentTitle") == hierarchy_titles.new_parent
+
+    new_parent_children = _get_children(dev_config, hierarchy_titles.new_parent)
+    assert hierarchy_titles.child in [child.get("title") for child in new_parent_children]
+
+    original_children = _get_children(dev_config, hierarchy_titles.parent)
+    assert hierarchy_titles.child not in [child.get("title") for child in original_children]
