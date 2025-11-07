@@ -152,6 +152,43 @@ def test_get_page_by_path_missing():
         assert page is None
 
 
+def test_get_page_by_path_single_title_descendant():
+    with app.test_request_context():
+        client = make_client()
+        page_payload = {
+            "id": "123",
+            "title": "Anywhere",
+            "ancestors": [{"id": mock_config["root_page_id"]}],
+        }
+        with patch.object(
+            ConfluenceClient,
+            "_search_page_by_title",
+            return_value=page_payload,
+        ) as mock_search:
+            page = client.get_page_by_path("Anywhere")
+
+        mock_search.assert_called_once_with("Anywhere", expand="ancestors")
+        assert page == page_payload
+
+
+def test_get_page_by_path_single_title_outside_root():
+    with app.test_request_context():
+        client = make_client()
+        page_payload = {
+            "id": "123",
+            "title": "OtherSpace",
+            "ancestors": [{"id": "not-root"}],
+        }
+        with patch.object(
+            ConfluenceClient,
+            "_search_page_by_title",
+            return_value=page_payload,
+        ):
+            page = client.get_page_by_path("OtherSpace")
+
+        assert page is None
+
+
 def test_get_page_body():
     with app.test_request_context():
         client = make_client()

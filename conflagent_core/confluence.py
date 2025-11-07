@@ -47,7 +47,9 @@ class ConfluenceClient:
             abort(response.status_code, response.text)
         return response
 
-    def _search_page_by_title(self, title: str, *, expand: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def _search_page_by_title(
+        self, title: str, *, expand: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
         expansions: List[str] = []
         if expand:
             expansions.extend([part for part in expand.split(",") if part])
@@ -70,6 +72,17 @@ class ConfluenceClient:
         if not page:
             abort(404, description=f"Page titled '{title}' not found")
         return page
+
+    def _is_descendant_of_root(self, page: Dict[str, Any]) -> bool:
+        """Return True if the page resides under the configured root page."""
+
+        if page.get("id") == self.root_page_id:
+            return True
+
+        return any(
+            ancestor.get("id") == self.root_page_id
+            for ancestor in page.get("ancestors", [])
+        )
 
     def _fetch_children(self, page_id: str) -> List[Dict[str, str]]:
         url = f"{self.base_url}/rest/api/content/{page_id}/child/page"
@@ -180,7 +193,18 @@ class ConfluenceClient:
         return current_parent_id
 
     def get_page_by_path(self, path: str) -> Optional[Dict[str, Any]]:
-        parts = path.strip("/").split("/")
+        normalized = path.strip("/")
+        if not normalized:
+            return None
+
+        parts = normalized.split("/")
+
+        if len(parts) == 1:
+            page = self._search_page_by_title(parts[0], expand="ancestors")
+            if page and self._is_descendant_of_root(page):
+                return page
+            return None
+
         current_parent_id = self.root_page_id
         page: Optional[Dict[str, Any]] = None
         for part in parts:
