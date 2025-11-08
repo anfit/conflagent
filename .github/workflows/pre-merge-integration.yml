@@ -7,25 +7,42 @@ on:
       - opened
       - reopened
       - synchronize
+  pull_request:
+    types:
+      - labeled
+      - opened
+      - reopened
+      - synchronize
 
 jobs:
   deploy:
     if: >-
-      github.event_name == 'pull_request_target' &&
       (
+        github.event_name == 'pull_request_target' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      ) && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
         (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
       )
     uses: ./.github/workflows/reusable-deploy.yml
     with:
       ref: ${{ github.event.pull_request.head.sha }}
+      repository: ${{ github.event.pull_request.head.repo.full_name }}
       environment: dev
     secrets: inherit
 
   integration-tests:
     if: >-
-      github.event_name == 'pull_request_target' &&
       (
+        github.event_name == 'pull_request_target' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      ) && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
         (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
       )
@@ -42,7 +59,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
+          token: ${{ secrets.PR_CHECKOUT_TOKEN != '' && secrets.PR_CHECKOUT_TOKEN || github.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -60,8 +79,13 @@ jobs:
 
   redeploy-dev:
     if: >-
-      github.event_name == 'pull_request_target' &&
       (
+        github.event_name == 'pull_request_target' ||
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        )
+      ) && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
         (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
       )

@@ -12,6 +12,14 @@ on:
         required: false
         default: ''
         type: string
+      repository:
+        description: 'Repository to checkout (owner/name). Defaults to caller repository.'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      PR_CHECKOUT_TOKEN:
+        required: false
 
 jobs:
   deploy:
@@ -22,7 +30,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          repository: ${{ inputs.repository != '' && inputs.repository || github.repository }}
           ref: ${{ inputs.ref }}
+          token: ${{ secrets.PR_CHECKOUT_TOKEN != '' && secrets.PR_CHECKOUT_TOKEN || github.token }}
 
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.8.0
