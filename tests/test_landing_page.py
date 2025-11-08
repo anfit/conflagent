@@ -20,4 +20,5 @@ def test_landing_page_serves_static_content(client):
     html = response.data.decode('utf-8')
     assert 'landing__hero-title' in html
     assert 'Welcome to Conflagent' in html
-    assert 'View API Specification' in html
+    assert 'landing__hero-subtitle' in html
+    assert 'View API Specification' not in html
