@@ -47,13 +47,12 @@ class ConfluenceClient:
             abort(response.status_code, response.text)
         return response
 
-    def _search_page_by_title(
+    def _search_pages_by_title(
         self,
         title: str,
         *,
         expand: Optional[str] = None,
-        descendants_only: bool = False,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:
         expansions: List[str] = []
         if expand:
             expansions.extend([part for part in expand.split(",") if part])
@@ -66,7 +65,16 @@ class ConfluenceClient:
 
         url = f"{self.base_url}/rest/api/content"
         response = self._request("get", url, params=params)
-        results = response.json().get("results", [])
+        return response.json().get("results", [])
+
+    def _search_page_by_title(
+        self,
+        title: str,
+        *,
+        expand: Optional[str] = None,
+        descendants_only: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        results = self._search_pages_by_title(title, expand=expand)
         if not results:
             return None
 
@@ -211,11 +219,10 @@ class ConfluenceClient:
         parts = normalized.split("/")
 
         if len(parts) == 1:
-            page = self._search_page_by_title(
-                parts[0], expand="ancestors", descendants_only=True
-            )
-            if page and self._is_descendant_of_root(page):
-                return page
+            results = self._search_pages_by_title(parts[0], expand="ancestors")
+            for page in results:
+                if self._is_descendant_of_root(page):
+                    return page
             return None
 
         current_parent_id = self.root_page_id
