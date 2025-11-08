@@ -34,6 +34,36 @@ jobs:
           ref: ${{ inputs.ref }}
           token: ${{ secrets.PR_CHECKOUT_TOKEN != '' && secrets.PR_CHECKOUT_TOKEN || github.token }}
 
+      - name: Generate build.properties
+        env:
+          GIT_COMMIT: ${{ github.sha }}
+          GIT_REF: ${{ inputs.ref }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          COMMIT_SHA="$GIT_COMMIT"
+          COMMIT_TS="$(git show -s --format=%cI "$COMMIT_SHA")"
+          BUILD_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          BRANCH="$GIT_REF"
+          if [[ "$BRANCH" == refs/heads/* ]]; then
+            BRANCH="${BRANCH#refs/heads/}"
+          elif [[ "$BRANCH" == refs/tags/* ]]; then
+            BRANCH="${BRANCH#refs/tags/}"
+          elif [[ "$BRANCH" == refs/* ]]; then
+            BRANCH="${BRANCH#refs/}"
+          fi
+          USER="$TRIGGERING_ACTOR"
+          if [ -z "$USER" ]; then
+            USER="$ACTOR"
+          fi
+          cat <<EOF > build.properties
+          commit.hash=$COMMIT_SHA
+          commit.timestamp=$COMMIT_TS
+          build.timestamp=$BUILD_TS
+          build.branch=$BRANCH
+          build.user=$USER
+          EOF
+
       - name: Set up SSH
         uses: webfactory/ssh-agent@v0.8.0
         with:
