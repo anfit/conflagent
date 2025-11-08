@@ -259,10 +259,12 @@ def test_create_or_update_page_creates_new():
         post_response.json.return_value = {"id": "99"}
         with patch.object(ConfluenceClient, "resolve_or_create_path", return_value="parent"), patch.object(
             ConfluenceClient, "get_page_by_title", return_value=None
-        ), patch.object(ConfluenceClient, "_request", return_value=post_response):
+        ), patch.object(ConfluenceClient, "_request", return_value=post_response) as mock_request:
             result = client.create_or_update_page("Parent/NewPage", "body")
 
         assert result == {"id": "99", "version": 1}
+        called_kwargs = mock_request.call_args.kwargs
+        assert called_kwargs["json"]["body"]["storage"]["value"].startswith("<p>")
 
 
 def test_create_page_defaults_to_root_parent():
@@ -278,6 +280,7 @@ def test_create_page_defaults_to_root_parent():
         assert called_args[0] == "post"
         assert "rest/api/content" in called_args[1]
         assert called_kwargs["json"]["ancestors"] == [{"id": mock_config["root_page_id"]}]
+        assert called_kwargs["json"]["body"]["storage"]["value"].startswith("<p>")
 
 
 def test_create_page_with_parent_title():
@@ -294,6 +297,7 @@ def test_create_page_with_parent_title():
         mock_lookup.assert_called_once_with("Parent")
         called_args, called_kwargs = mock_request.call_args
         assert called_kwargs["json"]["ancestors"] == [{"id": "parent"}]
+        assert called_kwargs["json"]["body"]["storage"]["value"].startswith("<p>")
         assert result == {"id": "77", "title": "Child", "version": 5}
 
 

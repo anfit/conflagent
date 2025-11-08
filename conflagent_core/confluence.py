@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional
 import requests
 from flask import abort
 
+from .content import to_confluence_storage
+
 
 class ConfluenceClient:
     """A thin wrapper around the Confluence REST API."""
@@ -259,7 +261,12 @@ class ConfluenceClient:
             "title": page_title,
             "ancestors": [{"id": parent_id}],
             "space": {"key": self.space_key},
-            "body": {"storage": {"value": body, "representation": "storage"}},
+            "body": {
+                "storage": {
+                    "value": to_confluence_storage(body),
+                    "representation": "storage",
+                }
+            },
         }
         url = f"{self.base_url}/rest/api/content"
         response = self._request("post", url, json=payload)
@@ -284,7 +291,12 @@ class ConfluenceClient:
             "title": title,
             "ancestors": [{"id": ancestor_id}],
             "space": {"key": self.space_key},
-            "body": {"storage": {"value": body, "representation": "storage"}},
+            "body": {
+                "storage": {
+                    "value": to_confluence_storage(body),
+                    "representation": "storage",
+                }
+            },
         }
         url = f"{self.base_url}/rest/api/content"
         response = self._request("post", url, json=payload)
@@ -344,7 +356,12 @@ class ConfluenceClient:
             "type": "page",
             "title": page["title"],
             "version": {"number": version},
-            "body": {"storage": {"value": new_body, "representation": "storage"}},
+            "body": {
+                "storage": {
+                    "value": to_confluence_storage(new_body),
+                    "representation": "storage",
+                }
+            },
         }
         url = f"{self.base_url}/rest/api/content/{page['id']}"
         self._request("put", url, json=payload)
