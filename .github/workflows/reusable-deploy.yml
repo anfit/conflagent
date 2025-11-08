@@ -36,12 +36,11 @@ jobs:
 
       - name: Generate build.properties
         env:
-          GIT_COMMIT: ${{ github.sha }}
           GIT_REF: ${{ inputs.ref }}
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
         run: |
-          COMMIT_SHA="$GIT_COMMIT"
+          COMMIT_SHA="$(git rev-parse HEAD)"
           COMMIT_TS="$(git show -s --format=%cI "$COMMIT_SHA")"
           BUILD_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           BRANCH="$GIT_REF"
