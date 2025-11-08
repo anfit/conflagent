@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conflagent API</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  </head>
+  <body>
+    <header class="hero">
+      <div class="container">
+        <h1>Welcome to Conflagent</h1>
+        <p>Your lightweight gateway for managing Confluence hierarchies.</p>
+        <a class="cta" href="/openapi.json">View API Specification</a>
+      </div>
+    </header>
+    <main class="container">
+      <section>
+        <h2>Getting Started</h2>
+        <p>
+          Use the REST endpoints under <code>/endpoint/&lt;endpoint_name&gt;</code> to explore and manage
+          your Confluence pages. Authenticate requests with a bearer token configured for your deployment.
+        </p>
+      </section>
+      <section>
+        <h2>Core Features</h2>
+        <ul>
+          <li>Browse page trees and retrieve structured hierarchies.</li>
+          <li>Create, update, and delete Confluence content programmatically.</li>
+          <li>Automatically handles markdown conversion and version conflicts.</li>
+        </ul>
+      </section>
+    </main>
+    <footer>
+      <p>
+        <span class="footer-item">{{ build_info.get('name', 'Conflagent') }}</span>
+        {% if build_info.get('version') %}
+          <span class="footer-item">v{{ build_info.get('version') }}</span>
+        {% endif %}
+        {% if build_info.get('build_date') %}
+          <span class="footer-item">Built {{ build_info.get('build_date') }}</span>
+        {% endif %}
+        {% if build_info.get('commit') %}
+          <span class="footer-item">Commit {{ build_info.get('commit') }}</span>
+        {% endif %}
+      </p>
+    </footer>
+  </body>
+</html>

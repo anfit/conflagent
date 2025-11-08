@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, Optional
 
-from flask import Flask, abort, g, jsonify, request
+from flask import Flask, abort, g, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
 from conflagent_core.auth import check_auth
@@ -21,6 +22,29 @@ from conflagent_core.response import error_response, success_response
 app = Flask(__name__)
 
 
+def _load_build_properties() -> Dict[str, str]:
+    properties_path = Path(__file__).with_name("build.properties")
+    properties: Dict[str, str] = {}
+
+    if not properties_path.exists():
+        return properties
+
+    with properties_path.open(encoding="utf-8") as prop_file:
+        for raw_line in prop_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            properties[key.strip()] = value.strip()
+
+    return properties
+
+
+_BUILD_PROPERTIES = _load_build_properties()
+
+
 _ERROR_CODE_BY_STATUS: Dict[int, str] = {
     400: "INVALID_INPUT",
     401: "UNAUTHORIZED",
@@ -30,6 +54,11 @@ _ERROR_CODE_BY_STATUS: Dict[int, str] = {
     422: "INVALID_OPERATION",
     500: "INTERNAL_ERROR",
 }
+
+
+@app.route("/", methods=["GET"])
+def landing_page():
+    return render_template("index.html", build_info=_BUILD_PROPERTIES)
 
 
 def _map_error_code(status_code: int) -> str:
