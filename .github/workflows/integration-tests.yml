@@ -2,6 +2,17 @@ name: Integration Tests
 
 on:
   workflow_call:
+    inputs:
+      repository:
+        description: 'Repository to checkout (owner/name). Defaults to caller repository.'
+        required: false
+        default: ''
+        type: string
+      ref:
+        description: 'Git ref to checkout. Defaults to the caller commit.'
+        required: false
+        default: ''
+        type: string
     secrets:
       CONFLAGENT_DEV_URL:
         required: true
@@ -9,6 +20,8 @@ on:
         required: true
       CONFLAGENT_DEV_TOKEN:
         required: true
+      PR_CHECKOUT_TOKEN:
+        required: false
   workflow_dispatch:
   schedule:
     - cron: '0 2 * * *'
@@ -27,8 +40,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.repository }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          repository: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.full_name || github.event_name == 'workflow_call' && inputs.repository != '' && inputs.repository || github.repository }}
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.event_name == 'workflow_call' && inputs.ref != '' && inputs.ref || github.sha }}
           token: ${{ secrets.PR_CHECKOUT_TOKEN != '' && secrets.PR_CHECKOUT_TOKEN || github.token }}
 
       - name: Set up Python
