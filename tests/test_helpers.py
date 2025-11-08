@@ -162,14 +162,12 @@ def test_get_page_by_path_single_title_descendant():
         }
         with patch.object(
             ConfluenceClient,
-            "_search_page_by_title",
-            return_value=page_payload,
+            "_search_pages_by_title",
+            return_value=[page_payload],
         ) as mock_search:
             page = client.get_page_by_path("Anywhere")
 
-        mock_search.assert_called_once_with(
-            "Anywhere", expand="ancestors", descendants_only=True
-        )
+        mock_search.assert_called_once_with("Anywhere", expand="ancestors")
         assert page == page_payload
 
 
@@ -183,8 +181,8 @@ def test_get_page_by_path_single_title_outside_root():
         }
         with patch.object(
             ConfluenceClient,
-            "_search_page_by_title",
-            return_value=page_payload,
+            "_search_pages_by_title",
+            return_value=[page_payload],
         ):
             page = client.get_page_by_path("OtherSpace")
 
@@ -395,13 +393,28 @@ def test_move_page_success():
     with app.test_request_context():
         client = make_client()
         page_lookup = [
-            {"id": "child", "title": "Child", "version": {"number": 1}, "ancestors": []},
-            {"id": "parent", "title": "New", "ancestors": [{"id": "root", "title": "Root"}]},
+            {
+                "id": "child",
+                "title": "Child",
+                "version": {"number": 1},
+                "ancestors": [
+                    {"id": "root", "title": "Root"},
+                    {"id": "old", "title": "Old"},
+                ],
+            },
+            {
+                "id": "parent",
+                "title": "New",
+                "ancestors": [{"id": "root", "title": "Root"}],
+            },
         ]
         page_details = {
             "id": "child",
             "title": "Child",
-            "ancestors": [{"id": "old", "title": "Old"}],
+            "ancestors": [
+                {"id": "root", "title": "Root"},
+                {"id": "old", "title": "Old"},
+            ],
             "version": {"number": 1},
         }
         parent_details = {
@@ -450,19 +463,34 @@ def test_move_page_prevents_circular_dependency():
     with app.test_request_context():
         client = make_client()
         page_lookup = [
-            {"id": "child", "title": "Child", "version": {"number": 1}, "ancestors": []},
-            {"id": "parent", "title": "Parent", "ancestors": [{"id": "child", "title": "Child"}]},
+            {
+                "id": "child",
+                "title": "Child",
+                "version": {"number": 1},
+                "ancestors": [{"id": "root", "title": "Root"}],
+            },
+            {
+                "id": "parent",
+                "title": "Parent",
+                "ancestors": [
+                    {"id": "root", "title": "Root"},
+                    {"id": "child", "title": "Child"},
+                ],
+            },
         ]
         page_details = {
             "id": "child",
             "title": "Child",
-            "ancestors": [],
+            "ancestors": [{"id": "root", "title": "Root"}],
             "version": {"number": 1},
         }
         parent_details = {
             "id": "parent",
             "title": "Parent",
-            "ancestors": [{"id": "child", "title": "Child"}],
+            "ancestors": [
+                {"id": "root", "title": "Root"},
+                {"id": "child", "title": "Child"},
+            ],
         }
         with patch.object(
             ConfluenceClient,
@@ -477,6 +505,63 @@ def test_move_page_prevents_circular_dependency():
                 client.move_page("Child", "Parent")
 
         assert exc.value.code == 422
+
+
+def test_move_page_rejects_page_outside_root():
+    with app.test_request_context():
+        client = make_client()
+        page_lookup = {"id": "child", "title": "Child", "version": {"number": 1}}
+        page_details = {
+            "id": "child",
+            "title": "Child",
+            "ancestors": [{"id": "other", "title": "Other"}],
+            "version": {"number": 1},
+        }
+        with patch.object(
+            ConfluenceClient, "_ensure_page_by_title", return_value=page_lookup
+        ), patch.object(ConfluenceClient, "_get_page", return_value=page_details):
+            with pytest.raises(HTTPException) as exc:
+                client.move_page("Child", "New")
+
+        assert exc.value.code == 404
+
+
+def test_move_page_rejects_new_parent_outside_root():
+    with app.test_request_context():
+        client = make_client()
+        page_lookup = [
+            {
+                "id": "child",
+                "title": "Child",
+                "version": {"number": 1},
+                "ancestors": [{"id": "root", "title": "Root"}],
+            },
+            {"id": "parent", "title": "Parent", "ancestors": []},
+        ]
+        page_details = {
+            "id": "child",
+            "title": "Child",
+            "ancestors": [{"id": "root", "title": "Root"}],
+            "version": {"number": 1},
+        }
+        parent_details = {
+            "id": "parent",
+            "title": "Parent",
+            "ancestors": [{"id": "other", "title": "Other"}],
+        }
+        with patch.object(
+            ConfluenceClient,
+            "_ensure_page_by_title",
+            side_effect=page_lookup,
+        ), patch.object(
+            ConfluenceClient,
+            "_get_page",
+            side_effect=[page_details, parent_details],
+        ):
+            with pytest.raises(HTTPException) as exc:
+                client.move_page("Child", "Parent")
+
+        assert exc.value.code == 404
 
 
 def test_rename_page_success():

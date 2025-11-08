@@ -191,9 +191,14 @@ def _remove_titles(config: Dict[str, str], *titles: str) -> None:
     for title in titles:
         if not title:
             continue
-        current_titles = set(_list_pages(config))
-        if title in current_titles:
-            _delete_page(config, title)
+        current_titles = _list_pages(config)
+        matching_paths = [
+            path
+            for path in current_titles
+            if path == title or path.endswith(f"/{title}")
+        ]
+        for path in matching_paths:
+            _delete_page(config, path)
 
 
 def _encode_title(title: str) -> str:

@@ -299,6 +299,9 @@ class ConfluenceClient:
         page_id = page["id"]
         detailed_page = self._get_page(page_id, expand="ancestors,version")
 
+        if not self._is_descendant_of_root(detailed_page):
+            abort(404, description="Page not found")
+
         ancestors = detailed_page.get("ancestors", [])
         old_parent_title: Optional[str] = None
         if ancestors:
@@ -307,6 +310,9 @@ class ConfluenceClient:
         new_parent = self._ensure_page_by_title(new_parent_title)
         new_parent_id = new_parent["id"]
         new_parent_details = self._get_page(new_parent_id, expand="ancestors")
+
+        if not self._is_descendant_of_root(new_parent_details):
+            abort(404, description="New parent not found")
         new_parent_ancestors = [ancestor["id"] for ancestor in new_parent_details.get("ancestors", [])]
         ancestry_chain = new_parent_ancestors + [new_parent_id]
         if page_id in ancestry_chain:
