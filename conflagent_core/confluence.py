@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import time
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -88,11 +89,22 @@ class ConfluenceClient:
 
         return results[0]
 
-    def _ensure_page_by_title(self, title: str, *, expand: Optional[str] = None) -> Dict[str, Any]:
-        page = self._search_page_by_title(title, expand=expand, descendants_only=True)
-        if not page:
-            abort(404, description=f"Page titled '{title}' not found")
-        return page
+    def _ensure_page_by_title(
+        self,
+        title: str,
+        *,
+        expand: Optional[str] = None,
+        attempts: int = 8,
+        pause_seconds: float = 0.5,
+    ) -> Dict[str, Any]:
+        attempts = max(1, attempts)
+        for attempt in range(attempts):
+            page = self._search_page_by_title(title, expand=expand, descendants_only=True)
+            if page:
+                return page
+            if attempt < attempts - 1:
+                time.sleep(pause_seconds)
+        abort(404, description=f"Page titled '{title}' not found")
 
     def _is_descendant_of_root(self, page: Dict[str, Any]) -> bool:
         """Return True if the page resides under the configured root page."""

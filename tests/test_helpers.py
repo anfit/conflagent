@@ -106,6 +106,38 @@ def test_get_page_by_title_missing():
         assert page is None
 
 
+def test_ensure_page_by_title_retries_until_found():
+    with app.test_request_context():
+        client = make_client()
+        final_page = {"id": "123", "title": "Match"}
+        with patch.object(
+            ConfluenceClient,
+            "_search_page_by_title",
+            side_effect=[None, None, final_page],
+        ) as mock_search, patch("conflagent_core.confluence.time.sleep") as mock_sleep:
+            page = client._ensure_page_by_title("Match", attempts=3, pause_seconds=0)
+
+        assert page is final_page
+        assert mock_search.call_count == 3
+        mock_sleep.assert_has_calls([call(0), call(0)])
+        assert mock_sleep.call_count == 2
+
+
+def test_ensure_page_by_title_raises_after_retries():
+    with app.test_request_context():
+        client = make_client()
+        with patch.object(ConfluenceClient, "_search_page_by_title", return_value=None) as mock_search, patch(
+            "conflagent_core.confluence.time.sleep"
+        ) as mock_sleep:
+            with pytest.raises(HTTPException) as exc:
+                client._ensure_page_by_title("Missing", attempts=3, pause_seconds=0)
+
+        assert exc.value.code == 404
+        assert mock_search.call_count == 3
+        mock_sleep.assert_has_calls([call(0), call(0)])
+        assert mock_sleep.call_count == 2
+
+
 def test_list_pages_recursive():
     with app.test_request_context():
         client = make_client()
