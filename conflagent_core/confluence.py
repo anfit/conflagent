@@ -48,7 +48,11 @@ class ConfluenceClient:
         return response
 
     def _search_page_by_title(
-        self, title: str, *, expand: Optional[str] = None
+        self,
+        title: str,
+        *,
+        expand: Optional[str] = None,
+        descendants_only: bool = False,
     ) -> Optional[Dict[str, Any]]:
         expansions: List[str] = []
         if expand:
@@ -65,10 +69,17 @@ class ConfluenceClient:
         results = response.json().get("results", [])
         if not results:
             return None
+
+        if descendants_only:
+            for page in results:
+                if self._is_descendant_of_root(page):
+                    return page
+            return None
+
         return results[0]
 
     def _ensure_page_by_title(self, title: str, *, expand: Optional[str] = None) -> Dict[str, Any]:
-        page = self._search_page_by_title(title, expand=expand)
+        page = self._search_page_by_title(title, expand=expand, descendants_only=True)
         if not page:
             abort(404, description=f"Page titled '{title}' not found")
         return page
@@ -200,7 +211,9 @@ class ConfluenceClient:
         parts = normalized.split("/")
 
         if len(parts) == 1:
-            page = self._search_page_by_title(parts[0], expand="ancestors")
+            page = self._search_page_by_title(
+                parts[0], expand="ancestors", descendants_only=True
+            )
             if page and self._is_descendant_of_root(page):
                 return page
             return None

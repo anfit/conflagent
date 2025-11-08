@@ -167,7 +167,9 @@ def test_get_page_by_path_single_title_descendant():
         ) as mock_search:
             page = client.get_page_by_path("Anywhere")
 
-        mock_search.assert_called_once_with("Anywhere", expand="ancestors")
+        mock_search.assert_called_once_with(
+            "Anywhere", expand="ancestors", descendants_only=True
+        )
         assert page == page_payload
 
 
@@ -185,6 +187,45 @@ def test_get_page_by_path_single_title_outside_root():
             return_value=page_payload,
         ):
             page = client.get_page_by_path("OtherSpace")
+
+        assert page is None
+
+
+def test_search_page_by_title_prefers_descendant():
+    with app.test_request_context():
+        client = make_client()
+        response = MagicMock()
+        response.json.return_value = {
+            "results": [
+                {"id": "1", "title": "Example", "ancestors": [{"id": "not-root"}]},
+                {
+                    "id": "2",
+                    "title": "Example",
+                    "ancestors": [{"id": mock_config["root_page_id"]}],
+                },
+            ]
+        }
+        with patch.object(ConfluenceClient, "_request", return_value=response):
+            page = client._search_page_by_title("Example", descendants_only=True)
+
+        assert page == {
+            "id": "2",
+            "title": "Example",
+            "ancestors": [{"id": mock_config["root_page_id"]}],
+        }
+
+
+def test_search_page_by_title_descendant_missing():
+    with app.test_request_context():
+        client = make_client()
+        response = MagicMock()
+        response.json.return_value = {
+            "results": [
+                {"id": "1", "title": "Example", "ancestors": [{"id": "other"}]}
+            ]
+        }
+        with patch.object(ConfluenceClient, "_request", return_value=response):
+            page = client._search_page_by_title("Example", descendants_only=True)
 
         assert page is None
 
