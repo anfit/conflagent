@@ -7,23 +7,11 @@ on:
       - opened
       - reopened
       - synchronize
-  pull_request:
-    types:
-      - labeled
-      - opened
-      - reopened
-      - synchronize
 
 jobs:
   deploy:
     if: >-
-      (
-        github.event_name == 'pull_request_target' ||
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        )
-      ) && (
+      (github.event_name == 'pull_request_target') && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
         (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
       )
@@ -36,13 +24,7 @@ jobs:
 
   integration-tests:
     if: >-
-      (
-        github.event_name == 'pull_request_target' ||
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        )
-      ) && (
+      (github.event_name == 'pull_request_target') && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
         (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
       )
@@ -79,13 +61,7 @@ jobs:
 
   redeploy-dev:
     if: >-
-      (
-        github.event_name == 'pull_request_target' ||
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        )
-      ) && (
+      always() && (github.event_name == 'pull_request_target') && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
         (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
       )
