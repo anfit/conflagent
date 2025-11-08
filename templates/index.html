@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conflagent API</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  </head>
+  <body class="landing">
+    <header class="landing__hero">
+      <div class="landing__container">
+        <h1 class="landing__hero-title">Welcome to Conflagent</h1>
+        <p class="landing__hero-subtitle">Your lightweight gateway for managing Confluence hierarchies.</p>
+        <a class="landing__hero-cta" href="/openapi.json">View API Specification</a>
+      </div>
+    </header>
+    <main class="landing__main">
+      <div class="landing__container">
+        <section class="landing__section">
+          <h2 class="landing__section-title">Getting Started</h2>
+          <p class="landing__section-body">
+            Use the REST endpoints under <code>/endpoint/&lt;endpoint_name&gt;</code> to explore and manage
+            your Confluence pages. Authenticate requests with a bearer token configured for your deployment.
+          </p>
+        </section>
+        <section class="landing__section">
+          <h2 class="landing__section-title">Core Features</h2>
+          <ul class="landing__feature-list">
+            <li class="landing__feature-item">Browse page trees and retrieve structured hierarchies.</li>
+            <li class="landing__feature-item">Create, update, and delete Confluence content programmatically.</li>
+            <li class="landing__feature-item">Automatically handles markdown conversion and version conflicts.</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+    <footer class="landing__footer">
+      <div class="landing__container landing__footer-container">
+        <span class="landing__footer-brand">Conflagent</span>
+        {% set branch = build_info.get('build.branch') %}
+        {% set commit_hash = build_info.get('commit.hash') %}
+        {% set commit_timestamp = build_info.get('commit.timestamp') %}
+        {% set build_timestamp = build_info.get('build.timestamp') %}
+        {% set build_user = build_info.get('build.user') %}
+        {% if branch or commit_hash or commit_timestamp or build_timestamp or build_user %}
+          <div class="landing__footer-items">
+            {% if branch %}
+              <span class="landing__footer-item">Branch {{ branch }}</span>
+            {% endif %}
+            {% if commit_hash %}
+              <span class="landing__footer-item">Commit {{ commit_hash }}</span>
+            {% endif %}
+            {% if commit_timestamp %}
+              <span class="landing__footer-item">Committed {{ commit_timestamp }}</span>
+            {% endif %}
+            {% if build_timestamp %}
+              <span class="landing__footer-item">Built {{ build_timestamp }}</span>
+            {% endif %}
+            {% if build_user %}
+              <span class="landing__footer-item">By {{ build_user }}</span>
+            {% endif %}
+          </div>
+        {% else %}
+          <p class="landing__footer-note">Build metadata will appear here after deployment.</p>
+        {% endif %}
+      </div>
+    </footer>
+  </body>
+</html>
