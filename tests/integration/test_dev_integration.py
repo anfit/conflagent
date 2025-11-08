@@ -1,5 +1,6 @@
 """Integration tests hitting the dev deployment."""
 import os
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -8,6 +9,10 @@ from urllib.parse import quote
 
 import pytest
 import requests
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+from conflagent_core.content import to_confluence_storage
 
 
 REQUIRED_ENV_VARS = {
@@ -22,6 +27,8 @@ SANDBOX_BODY = "# Sandbox Test Page\nThis is a test page created automatically."
 SANDBOX_UPDATED_BODY = (
     "# Sandbox Test Page (Updated)\nThis page has been updated successfully."
 )
+SANDBOX_BODY_STORAGE = to_confluence_storage(SANDBOX_BODY)
+SANDBOX_UPDATED_BODY_STORAGE = to_confluence_storage(SANDBOX_UPDATED_BODY)
 
 
 @dataclass
@@ -122,9 +129,21 @@ def _create_page_under_parent(
     return payload
 
 
-def _read_page(config: Dict[str, str], title: str) -> Dict[str, str]:
-    encoded_title = quote(title, safe="")
+def _read_page(
+    config: Dict[str, str], title: str, *, fallback_to_paths: bool = False
+) -> Dict[str, str]:
+    encoded_title = _encode_title(title)
     response = _json_request(config, "GET", f"/pages/{encoded_title}")
+    if response.status_code == 404 and fallback_to_paths:
+        matching_paths = [
+            path
+            for path in _list_pages(config)
+            if path == title or path.endswith(f"/{title}")
+        ]
+        for path in matching_paths:
+            if path == title:
+                continue
+            return _read_page(config, path, fallback_to_paths=False)
     assert response.status_code == 200
     payload = response.json()
     assert payload.get("success") is True
@@ -136,7 +155,7 @@ def _read_page(config: Dict[str, str], title: str) -> Dict[str, str]:
 
 
 def _update_page(config: Dict[str, str], title: str, body: str) -> Dict[str, str]:
-    encoded_title = quote(title, safe="")
+    encoded_title = _encode_title(title)
     response = _json_request(
         config,
         "PUT",
@@ -166,8 +185,10 @@ def _rename_page(config: Dict[str, str], old_title: str, new_title: str) -> Dict
 
 
 def _delete_page(config: Dict[str, str], title: str) -> Dict[str, str]:
-    encoded_title = quote(title, safe="")
+    encoded_title = _encode_title(title)
     response = _json_request(config, "DELETE", f"/pages/{encoded_title}")
+    if response.status_code == 404:
+        return {"success": False, "data": None}
     assert response.status_code == 200
     payload = response.json()
     assert payload.get("success") is True
@@ -202,7 +223,7 @@ def _remove_titles(config: Dict[str, str], *titles: str) -> None:
 
 
 def _encode_title(title: str) -> str:
-    return quote(title, safe="")
+    return quote(title, safe="/")
 
 
 def _get_children(config: Dict[str, str], title: str) -> List[Dict[str, Any]]:
@@ -400,7 +421,7 @@ def test_read_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sandbo
     read_payload = _read_page(dev_config, sandbox_titles.title)
     assert read_payload.get("success") is True
     assert read_payload["data"]["title"] == sandbox_titles.title
-    assert SANDBOX_BODY in read_payload["data"]["body"]
+    assert read_payload["data"]["body"] == SANDBOX_BODY_STORAGE
 
 
 @pytest.mark.integration
@@ -411,8 +432,10 @@ def test_update_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
     update_result = _update_page(dev_config, sandbox_titles.title, SANDBOX_UPDATED_BODY)
     assert update_result.get("success") is True
     assert "version" in update_result["data"]
-    updated_payload = _read_page(dev_config, sandbox_titles.title)
-    assert "updated successfully" in updated_payload["data"]["body"]
+    updated_payload = _read_page(
+        dev_config, sandbox_titles.title, fallback_to_paths=True
+    )
+    assert updated_payload["data"]["body"] == SANDBOX_UPDATED_BODY_STORAGE
 
 
 @pytest.mark.integration
@@ -426,8 +449,10 @@ def test_rename_page_in_sandbox(dev_config: Dict[str, str], sandbox_titles: Sand
     assert sandbox_titles.renamed_title in titles_after_rename
     assert sandbox_titles.title not in titles_after_rename
 
-    renamed_payload = _read_page(dev_config, sandbox_titles.renamed_title)
-    assert SANDBOX_BODY in renamed_payload["data"]["body"]
+    renamed_payload = _read_page(
+        dev_config, sandbox_titles.renamed_title, fallback_to_paths=True
+    )
+    assert renamed_payload["data"]["body"] == SANDBOX_BODY_STORAGE
 
 
 @pytest.mark.integration

@@ -1,3 +1,5 @@
+"""Integration-style tests to confirm markdown conversion is applied."""
+
 import os
 import sys
 from unittest.mock import MagicMock, patch
