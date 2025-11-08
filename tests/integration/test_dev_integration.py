@@ -27,8 +27,8 @@ SANDBOX_BODY = "# Sandbox Test Page\nThis is a test page created automatically."
 SANDBOX_UPDATED_BODY = (
     "# Sandbox Test Page (Updated)\nThis page has been updated successfully."
 )
-SANDBOX_BODY_STORAGE = to_confluence_storage(SANDBOX_BODY)
-SANDBOX_UPDATED_BODY_STORAGE = to_confluence_storage(SANDBOX_UPDATED_BODY)
+SANDBOX_BODY_STORAGE = to_confluence_storage(SANDBOX_BODY).strip()
+SANDBOX_UPDATED_BODY_STORAGE = to_confluence_storage(SANDBOX_UPDATED_BODY).strip()
 
 
 @dataclass
@@ -201,8 +201,21 @@ def _cleanup_existing_sandbox_pages(config: Dict[str, str], titles: Iterable[str
             _delete_page(config, title)
 
 
-def _ensure_no_sandbox_titles(titles: Iterable[str]) -> None:
-    leftovers = [title for title in titles if title.startswith(SANDBOX_PREFIX)]
+def _ensure_no_sandbox_titles(
+    config: Dict[str, str], *, attempts: int = 5, pause_seconds: float = 1.0
+) -> None:
+    leftovers: List[str] = []
+    for _ in range(attempts):
+        current_titles = _list_pages(config)
+        leftovers = [
+            title
+            for title in current_titles
+            if title.startswith(SANDBOX_PREFIX) or title.startswith(CLEANED_PREFIX)
+        ]
+        if not leftovers:
+            return
+        _cleanup_existing_sandbox_pages(config, leftovers)
+        time.sleep(pause_seconds)
     assert not leftovers, f"Unexpected sandbox titles lingering: {leftovers}"
 
 
@@ -212,14 +225,18 @@ def _remove_titles(config: Dict[str, str], *titles: str) -> None:
     for title in titles:
         if not title:
             continue
-        current_titles = _list_pages(config)
-        matching_paths = [
-            path
-            for path in current_titles
-            if path == title or path.endswith(f"/{title}")
-        ]
-        for path in matching_paths:
-            _delete_page(config, path)
+        for _ in range(5):
+            current_titles = _list_pages(config)
+            matching_paths = [
+                path
+                for path in current_titles
+                if path == title or path.endswith(f"/{title}")
+            ]
+            if not matching_paths:
+                break
+            for path in matching_paths:
+                _delete_page(config, path)
+            time.sleep(1.0)
 
 
 def _encode_title(title: str) -> str:
@@ -291,7 +308,7 @@ def sandbox_titles(dev_config: Dict[str, str]) -> SandboxTitles:
 
     existing_titles = _list_pages(dev_config)
     _cleanup_existing_sandbox_pages(dev_config, existing_titles)
-    _ensure_no_sandbox_titles(_list_pages(dev_config))
+    _ensure_no_sandbox_titles(dev_config)
 
     unique_suffix = uuid.uuid4().hex[:8]
     base_title = f"{SANDBOX_PREFIX}TestPage_{unique_suffix}"
@@ -303,7 +320,7 @@ def sandbox_titles(dev_config: Dict[str, str]) -> SandboxTitles:
         yield titles
     finally:
         _remove_titles(dev_config, titles.renamed_title, titles.title)
-        _ensure_no_sandbox_titles(_list_pages(dev_config))
+        _ensure_no_sandbox_titles(dev_config)
 
 
 @pytest.fixture
@@ -312,7 +329,7 @@ def hierarchy_titles(dev_config: Dict[str, str]) -> HierarchyTitles:
 
     existing_titles = _list_pages(dev_config)
     _cleanup_existing_sandbox_pages(dev_config, existing_titles)
-    _ensure_no_sandbox_titles(_list_pages(dev_config))
+    _ensure_no_sandbox_titles(dev_config)
 
     unique_suffix = uuid.uuid4().hex[:8]
     parent = f"{SANDBOX_PREFIX}TreeParent_{unique_suffix}"
@@ -325,7 +342,7 @@ def hierarchy_titles(dev_config: Dict[str, str]) -> HierarchyTitles:
         yield titles
     finally:
         _remove_titles(dev_config, titles.child, titles.new_parent, titles.parent)
-        _ensure_no_sandbox_titles(_list_pages(dev_config))
+        _ensure_no_sandbox_titles(dev_config)
 
 
 @pytest.mark.integration
