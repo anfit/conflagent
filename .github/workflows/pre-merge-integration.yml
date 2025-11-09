@@ -43,7 +43,7 @@ jobs:
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.sha }}
-          token: ${{ secrets.PR_CHECKOUT_TOKEN != '' && secrets.PR_CHECKOUT_TOKEN || github.token }}
+          token: ${{ github.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -58,18 +58,3 @@ jobs:
       - name: Run integration suite
         run: |
           pytest -m integration -v
-
-  redeploy-dev:
-    name: Re-deploy DEV application from ${{ github.event.repository.default_branch }}
-    if: >-
-      always() && (github.event_name == 'pull_request_target' ) && (
-        contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
-        (github.event.action == 'labeled' && github.event.label.name == 'needs-integration-tests')
-      )
-    needs:
-      - integration-tests
-    uses: ./.github/workflows/reusable-deploy.yml
-    with:
-      ref: ${{ github.event.repository.default_branch }}
-      environment: dev
-    secrets: inherit
