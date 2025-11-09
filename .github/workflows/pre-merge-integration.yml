@@ -57,4 +57,4 @@ jobs:
 
       - name: Run integration suite
         run: |
-          pytest -m integration -v
+          pytest -m integration -v --maxfail=1
