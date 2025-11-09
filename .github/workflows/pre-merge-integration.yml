@@ -9,7 +9,7 @@ on:
       - synchronize
 jobs:
   deploy:
-    name: Deploy DEV application from ${{ github.head_ref }}
+    name: Deploy ${{ github.head_ref }} to DEV
     if: >-
       (github.event_name == 'pull_request_target' ) && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
@@ -23,7 +23,7 @@ jobs:
     secrets: inherit
 
   integration-tests:
-    name: Run integration tests against dev
+    name: Run integration tests on ${{ github.head_ref }} against DEV
     if: >-
       (github.event_name == 'pull_request_target') && (
         contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
