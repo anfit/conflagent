@@ -17,7 +17,7 @@ jobs:
       )
     uses: ./.github/workflows/reusable-deploy.yml
     with:
-      ref: ${{ github.event.pull_request.head.sha }}
+      ref: ${{ github.event.pull_request.head }}
       repository: ${{ github.event.pull_request.head.repo.full_name }}
       environment: dev
     secrets: inherit
