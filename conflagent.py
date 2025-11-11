@@ -788,7 +788,6 @@ def openapi_schema(endpoint_name: str):
     spec = generate_openapi_spec(endpoint_name, request.host_url, app)
     return jsonify(spec)
 
-
 @app.route("/endpoint/<endpoint_name>/health", methods=["GET"])
 @with_config
 @document_operation(
@@ -822,6 +821,16 @@ def openapi_schema(endpoint_name: str):
 def api_health(endpoint_name: str):
     return _success("Service healthy.", data={"status": "ok"})
 
+
+@app.route("/openapi.json", methods=["GET"])
+def openapi_schema_summary(endpoint_name: str):
+    spec = generate_openapi_spec("<endpoint_name>", request.host_url, app)
+    return jsonify(spec)
+
+
+@app.route("/health", methods=["GET"])
+def api_global_health(endpoint_name: str):
+    return _success("Service healthy.", data={"status": "ok"})
 
 if __name__ == "__main__":  # pragma: no cover - manual execution only
     app.run(host="0.0.0.0", port=5000)
