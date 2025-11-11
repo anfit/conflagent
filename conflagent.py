@@ -488,7 +488,7 @@ def api_create_page(endpoint_name: str):
 @document_operation(
     "/pages/{title}/move",
     "post",
-    flavors=(),
+    flavors=("upload",),
     summary="Move a page under a new parent",
     description="Re-parents an existing page to a new ancestor within the same space.",
     operationId="movePage",
@@ -562,7 +562,7 @@ def api_move_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages/{title}",
     "put",
-    flavors=(),
+    flavors=("upload",),
     summary="Update content of a page by title",
     description=(
         "Updates the full content of a Confluence page identified by title. Only "
@@ -644,7 +644,7 @@ def api_update_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages/{title}",
     "delete",
-    flavors=(),
+    flavors=("upload",),
     summary="Delete a page by title",
     description=(
         "Deletes a Confluence page identified by title. Only pages under the "
@@ -703,7 +703,7 @@ def api_delete_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages/rename",
     "post",
-    flavors=(),
+    flavors=("upload",),
     summary="Rename a page by title",
     description=(
         "Renames a page by changing its title. The page must be a direct child of "
