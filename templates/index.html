@@ -8,9 +8,12 @@
   </head>
   <body class="landing">
     <header class="landing__hero">
-      <div class="landing__container">
-        <h1 class="landing__hero-title">Welcome to Conflagent</h1>
-        <p class="landing__hero-subtitle">Your lightweight gateway for managing Confluence hierarchies.</p>
+      <div class="landing__container landing__hero-inner">
+        <div class="landing__hero-copy">
+          <h1 class="landing__hero-title">Welcome to Conflagent</h1>
+          <p class="landing__hero-subtitle">Your lightweight gateway for managing Confluence hierarchies.</p>
+        </div>
+        <button id="api-toggle" class="landing__hero-cta" type="button">Show available APIs</button>
       </div>
     </header>
     <main class="landing__main">
@@ -18,8 +21,9 @@
         <section class="landing__section">
           <h2 class="landing__section-title">Getting Started</h2>
           <p class="landing__section-body">
-            Use the REST endpoints under <code>/endpoint/&lt;endpoint_name&gt;</code> to explore and manage
-            your Confluence pages. Authenticate requests with a bearer token configured for your deployment.
+            Each configured endpoint exposes the same REST APIs under <code>/endpoint/&lt;endpoint_name&gt;</code>
+            for exploring and managing your Confluence spaces. Authenticate requests with a bearer token
+            associated with your deployment.
           </p>
         </section>
         <section class="landing__section">
@@ -29,6 +33,11 @@
             <li class="landing__feature-item">Create, update, and delete Confluence content programmatically.</li>
             <li class="landing__feature-item">Automatically handles markdown conversion and version conflicts.</li>
           </ul>
+        </section>
+        <section id="api-section" class="landing__section landing__section--apis" hidden>
+          <h2 class="landing__section-title">Available APIs</h2>
+          <p class="landing__section-body">The following operations are retrieved from the live OpenAPI definition.</p>
+          <div id="api-table-container" class="landing__api-table-wrapper" aria-live="polite"></div>
         </section>
       </div>
     </main>
@@ -63,5 +72,87 @@
         {% endif %}
       </div>
     </footer>
+    <script>
+      (function () {
+        const toggleButton = document.getElementById('api-toggle');
+        const apiSection = document.getElementById('api-section');
+        const tableContainer = document.getElementById('api-table-container');
+        let hasLoaded = false;
+
+        function createTable(paths) {
+          const table = document.createElement('table');
+          table.className = 'landing__api-table';
+
+          const thead = document.createElement('thead');
+          thead.innerHTML = '<tr><th scope="col">Method</th><th scope="col">Path</th><th scope="col">Description</th></tr>';
+          table.appendChild(thead);
+
+          const tbody = document.createElement('tbody');
+
+          Object.entries(paths).forEach(([path, operations]) => {
+            Object.entries(operations).forEach(([method, operation]) => {
+              if (method.startsWith('x-')) {
+                return;
+              }
+
+              const row = document.createElement('tr');
+              const description = operation.summary || operation.description || '';
+
+              row.innerHTML = `
+                <td data-label="Method">${method.toUpperCase()}</td>
+                <td data-label="Path">${path}</td>
+                <td data-label="Description">${description}</td>
+              `;
+              tbody.appendChild(row);
+            });
+          });
+
+          if (!tbody.children.length) {
+            const emptyRow = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.setAttribute('colspan', '3');
+            cell.textContent = 'No operations were found in the OpenAPI document.';
+            emptyRow.appendChild(cell);
+            tbody.appendChild(emptyRow);
+          }
+
+          table.appendChild(tbody);
+          return table;
+        }
+
+        async function fetchApis() {
+          tableContainer.innerHTML = '<p class="landing__api-loading">Loading available APIs…</p>';
+
+          try {
+            const response = await fetch('/openapi.json', { cache: 'no-store' });
+            if (!response.ok) {
+              throw new Error('Unable to load OpenAPI definition');
+            }
+
+            const spec = await response.json();
+            const table = createTable(spec.paths || {});
+            tableContainer.innerHTML = '';
+            tableContainer.appendChild(table);
+          } catch (error) {
+            tableContainer.innerHTML = '<p class="landing__api-error">Failed to load APIs. Please try again later.</p>';
+          }
+        }
+
+        toggleButton.addEventListener('click', () => {
+          const isHidden = apiSection.hasAttribute('hidden');
+          if (isHidden) {
+            apiSection.removeAttribute('hidden');
+            toggleButton.textContent = 'Hide available APIs';
+            if (!hasLoaded) {
+              fetchApis();
+              hasLoaded = true;
+            }
+          } else {
+            apiSection.setAttribute('hidden', '');
+            toggleButton.textContent = 'Show available APIs';
+          }
+        });
+      })();
+    </script>
   </body>
 </html>
