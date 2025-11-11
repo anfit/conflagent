@@ -435,3 +435,49 @@ def test_openapi_schema(mock_load_config, client):
     assert "paths" in data
     # Be more lenient: just check that at least one expected endpoint is present
     assert any("/pages" in path for path in data["paths"])
+
+
+@patch(
+    "conflagent_core.config.load_config",
+    return_value={**mock_config, "flavor": "read"},
+)
+def test_openapi_schema_filters_mutations_for_read_flavor(mock_load_config, client):
+    response = client.get(f"/endpoint/{endpoint}/openapi.json")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    pages_operations = data["paths"].get("/pages", {})
+    assert "post" not in pages_operations, "Read flavor must not expose page creation"
+
+    page_detail_operations = data["paths"].get("/pages/{title}", {})
+    assert "put" not in page_detail_operations
+    assert "delete" not in page_detail_operations
+
+    move_operations = data["paths"].get("/pages/{title}/move", {})
+    assert not move_operations, "Read flavor should not include move operations"
+
+    rename_operations = data["paths"].get("/pages/rename", {})
+    assert not rename_operations, "Read flavor should not include rename operations"
+
+
+@patch(
+    "conflagent_core.config.load_config",
+    return_value={**mock_config, "flavor": "upload"},
+)
+def test_openapi_schema_includes_upload_operations(mock_load_config, client):
+    response = client.get(f"/endpoint/{endpoint}/openapi.json")
+    assert response.status_code == 200
+    data = response.get_json()
+
+    pages_operations = data["paths"].get("/pages", {})
+    assert "post" in pages_operations
+
+    page_detail_operations = data["paths"].get("/pages/{title}", {})
+    assert "put" not in page_detail_operations
+    assert "delete" not in page_detail_operations
+
+    move_operations = data["paths"].get("/pages/{title}/move", {})
+    assert not move_operations
+
+    rename_operations = data["paths"].get("/pages/rename", {})
+    assert not rename_operations
