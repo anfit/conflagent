@@ -473,11 +473,11 @@ def test_openapi_schema_includes_upload_operations(mock_load_config, client):
     assert "post" in pages_operations
 
     page_detail_operations = data["paths"].get("/pages/{title}", {})
-    assert "put" in page_detail_operations
-    assert "delete" in page_detail_operations
+    assert "put" not in page_detail_operations
+    assert "delete" not in page_detail_operations
 
     move_operations = data["paths"].get("/pages/{title}/move", {})
-    assert "post" in move_operations
+    assert not move_operations
 
     rename_operations = data["paths"].get("/pages/rename", {})
-    assert "post" in rename_operations
+    assert not rename_operations
