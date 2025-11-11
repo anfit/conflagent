@@ -95,6 +95,25 @@ def _get_client() -> ConfluenceClient:
     return ConfluenceClient(g.config)
 
 
+def _sanitize_title(raw_title: Optional[str]) -> Optional[str]:
+    if raw_title is None:
+        return None
+
+    stripped = raw_title.strip()
+    if not stripped:
+        return ""
+
+    if "/" not in stripped:
+        return stripped
+
+    trimmed = stripped.rstrip("/")
+    if not trimmed:
+        return ""
+
+    segment = trimmed.rsplit("/", 1)[-1]
+    return segment.strip()
+
+
 def _parse_depth(raw_depth: Optional[str]) -> int:
     if raw_depth is None:
         return 2
@@ -192,7 +211,9 @@ def api_get_page_tree(endpoint_name: str):
     check_auth()
     client = _get_client()
     depth = _parse_depth(request.args.get("depth"))
-    start_title = request.args.get("startTitle") or None
+    start_title = _sanitize_title(request.args.get("startTitle"))
+    if start_title == "":
+        start_title = None
     tree = client.get_page_tree(start_title=start_title, depth=depth)
     return _success("Page tree retrieved.", data=tree)
 
@@ -245,7 +266,10 @@ def api_get_page_tree(endpoint_name: str):
 def api_list_children(endpoint_name: str, title: str):
     check_auth()
     client = _get_client()
-    children = client.get_page_children(title)
+    normalized_title = _sanitize_title(title)
+    if not normalized_title:
+        abort(400, description="Title is required")
+    children = client.get_page_children(normalized_title)
     return _success("Child pages retrieved.", data=children)
 
 
@@ -293,7 +317,10 @@ def api_list_children(endpoint_name: str, title: str):
 def api_get_parent(endpoint_name: str, title: str):
     check_auth()
     client = _get_client()
-    parent = client.get_page_parent(title)
+    normalized_title = _sanitize_title(title)
+    if not normalized_title:
+        abort(400, description="Title is required")
+    parent = client.get_page_parent(normalized_title)
     return _success("Parent metadata retrieved.", data=parent)
 
 
@@ -388,14 +415,17 @@ def api_list_subpages(endpoint_name: str):  # pragma: no cover - exercised via t
 def api_read_page(endpoint_name: str, title: str):
     check_auth()
     client = _get_client()
-    page = client.get_page_by_path(title)
+    normalized_title = _sanitize_title(title)
+    if not normalized_title:
+        abort(400, description="Title is required")
+    page = client.get_page_by_path(normalized_title)
     if not page:
         abort(404, description="Page not found")
 
     content = client.get_page_body(page["id"])
     return _success(
         "Page retrieved.",
-        data={"title": title, "body": content},
+        data={"title": normalized_title, "body": content},
     )
 
 
@@ -465,11 +495,13 @@ def api_read_page(endpoint_name: str, title: str):
 def api_create_page(endpoint_name: str):
     check_auth()
     data = request.get_json(force=True)
-    title = data.get("title")
+    title = _sanitize_title(data.get("title"))
     body = data.get("body", "")
-    parent_title = data.get("parentTitle")
+    parent_title = _sanitize_title(data.get("parentTitle"))
     if not title:
         abort(400, description="Title is required")
+    if parent_title == "":
+        parent_title = None
 
     client = _get_client()
     result = client.create_page(title, body, parent_title)
@@ -536,12 +568,15 @@ def api_create_page(endpoint_name: str):
 def api_move_page(endpoint_name: str, title: str):
     check_auth()
     data = request.get_json(force=True)
-    new_parent_title = data.get("newParentTitle")
+    normalized_title = _sanitize_title(title)
+    if not normalized_title:
+        abort(400, description="Title is required")
+    new_parent_title = _sanitize_title(data.get("newParentTitle"))
     if not new_parent_title:
         abort(400, description="newParentTitle is required")
 
     client = _get_client()
-    result = client.move_page(title, new_parent_title)
+    result = client.move_page(normalized_title, new_parent_title)
     payload = {
         "title": result["title"],
         "oldParentTitle": result["old_parent_title"],
@@ -623,7 +658,10 @@ def api_update_page(endpoint_name: str, title: str):
     new_body = data.get("body", "")
 
     client = _get_client()
-    page = client.get_page_by_path(title)
+    normalized_title = _sanitize_title(title)
+    if not normalized_title:
+        abort(400, description="Title is required")
+    page = client.get_page_by_path(normalized_title)
     if not page:
         abort(404, description="Page not found")
 
@@ -678,7 +716,10 @@ def api_delete_page(endpoint_name: str, title: str):
     check_auth()
 
     client = _get_client()
-    page = client.get_page_by_path(title)
+    normalized_title = _sanitize_title(title)
+    if not normalized_title:
+        abort(400, description="Title is required")
+    page = client.get_page_by_path(normalized_title)
     if not page:
         abort(404, description="Page not found")
 
@@ -745,8 +786,8 @@ def api_delete_page(endpoint_name: str, title: str):
 def api_rename_page(endpoint_name: str):
     check_auth()
     data = request.get_json(force=True)
-    old_title = data.get("old_title")
-    new_title = data.get("new_title")
+    old_title = _sanitize_title(data.get("old_title"))
+    new_title = _sanitize_title(data.get("new_title"))
 
     if not old_title or not new_title:
         abort(400, description="Both 'old_title' and 'new_title' are required.")
