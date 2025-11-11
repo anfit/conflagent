@@ -387,7 +387,7 @@ def test_rename_page_missing_source(mock_load_config, mock_client_cls, client):
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_health(mock_load_config, client):
-    response = client.get(f"/endpoint/{endpoint}/health", headers=headers)
+    response = client.get(f"/endpoint/{endpoint}/health")
     assert response.status_code == 200
     payload = response.get_json()
     assert payload["success"] is True
@@ -429,7 +429,7 @@ def test_timestamp_field_is_iso8601(mock_load_config, mock_client_cls, client):
 
 @patch("conflagent_core.config.load_config", return_value=mock_config)
 def test_openapi_schema(mock_load_config, client):
-    response = client.get(f"/endpoint/{endpoint}/openapi.json", headers=headers)
+    response = client.get(f"/endpoint/{endpoint}/openapi.json")
     assert response.status_code == 200
     data = response.get_json()
     assert "paths" in data

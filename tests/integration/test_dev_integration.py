@@ -349,9 +349,10 @@ def hierarchy_titles(dev_config: Dict[str, str]) -> HierarchyTitles:
 def test_endpoint_health_reports_ok(dev_config: Dict[str, str]):
     response = requests.get(
         _full_url(dev_config, "/health"),
-        headers=_auth_headers(dev_config["token"]),
         timeout=10,
     )
+    # Endpoint-level health should be accessible without authentication so that
+    # tooling can probe readiness without managing tokens.
     assert response.status_code == 200
     content_type = response.headers.get("Content-Type", "")
     assert "application/json" in content_type
@@ -413,9 +414,9 @@ def test_missing_page_returns_404(dev_config: Dict[str, str]):
 def test_endpoint_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
     response = requests.get(
         _full_url(dev_config, "/openapi.json"),
-        headers=_auth_headers(dev_config["token"]),
         timeout=10,
     )
+    # The endpoint-specific OpenAPI document should also be publicly readable.
     assert response.status_code == 200
     payload = response.json()
     assert "servers" in payload
