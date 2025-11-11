@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Tuple
 
 import pytest
-from flask import Flask
+from flask import Flask, g
 
 from conflagent_core.openapi import (
     BEARER_SECURITY_REQUIREMENT,
@@ -23,6 +23,7 @@ def test_document_operation_stores_copy_of_metadata() -> None:
     @document_operation(
         "/demo",
         "get",
+        flavors=("read", "default", "read"),
         summary="Demo endpoint",
         responses=responses,
         security=BEARER_SECURITY_REQUIREMENT,
@@ -45,6 +46,10 @@ def test_document_operation_stores_copy_of_metadata() -> None:
         }
     }
 
+    assert handler.__openapi_flavors__ == {
+        "/demo": {"get": ("read",)}
+    }
+
 
 def _build_documented_app() -> Tuple[Flask, dict, dict]:
     """Create a Flask app with documented routes for test purposes."""
@@ -56,6 +61,7 @@ def _build_documented_app() -> Tuple[Flask, dict, dict]:
     @document_operation(
         "/alpha",
         "get",
+        flavors=("read",),
         summary="List alpha",
         responses=list_responses,
         security=BEARER_SECURITY_REQUIREMENT,
@@ -86,6 +92,7 @@ def _build_documented_app() -> Tuple[Flask, dict, dict]:
     @document_operation(
         "/alpha",
         "post",
+        flavors=("upload",),
         summary="Create alpha",
         requestBody=create_body,
         responses=create_responses,
@@ -108,7 +115,7 @@ def test_collect_documented_paths_merges_operations() -> None:
     """Documented routes should be merged into a single OpenAPI path object."""
 
     app, list_responses, create_responses = _build_documented_app()
-    collected = _collect_documented_paths(app)
+    collected, flavors = _collect_documented_paths(app)
 
     # Mutating the original dictionaries after collection should not change stored results.
     list_responses["200"]["description"] = "altered"
@@ -118,6 +125,7 @@ def test_collect_documented_paths_merges_operations() -> None:
     assert set(collected["/alpha"].keys()) == {"get", "post"}
     assert collected["/alpha"]["get"]["responses"] == {"200": {"description": "Listed"}}
     assert collected["/alpha"]["post"]["responses"] == {"201": {"description": "Created"}}
+    assert flavors == {"/alpha": {"get": ("read",), "post": ("upload",)}}
 
 
 def test_collect_documented_paths_detects_conflicts() -> None:
@@ -180,4 +188,39 @@ def test_generate_openapi_spec_includes_routes_and_server_metadata() -> None:
     assert spec["paths"]["/alpha"]["post"]["requestBody"]["content"]["application/json"]["schema"]["required"] == [
         "name"
     ]
+
+
+def test_generate_openapi_spec_filters_by_configured_flavor() -> None:
+    app, *_ = _build_documented_app()
+    host_url = "https://example.test/root/"
+
+    with app.test_request_context():
+        g.config = {"flavor": "read"}
+        spec = generate_openapi_spec("alpha", host_url, app)
+        assert "/alpha" in spec["paths"]
+        assert set(spec["paths"]["/alpha"].keys()) == {"get"}
+
+    with app.test_request_context():
+        g.config = {"flavor": "upload"}
+        spec = generate_openapi_spec("alpha", host_url, app)
+        assert "/alpha" in spec["paths"]
+        assert set(spec["paths"]["/alpha"].keys()) == {"post"}
+
+
+def test_generate_openapi_spec_always_operations_included() -> None:
+    app = Flask(__name__)
+
+    @document_operation("/visible", "get", flavors=("always",), responses={"200": {"description": "OK"}})
+    def visible() -> str:
+        return "visible"
+
+    app.add_url_rule("/visible", view_func=visible, endpoint="visible", methods=["GET"])
+
+    host_url = "https://example.test/root/"
+
+    with app.test_request_context():
+        g.config = {"flavor": "upload"}
+        spec = generate_openapi_spec("alpha", host_url, app)
+        assert "/visible" in spec["paths"]
+        assert "get" in spec["paths"]["/visible"]
 

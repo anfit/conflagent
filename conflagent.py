@@ -124,6 +124,7 @@ def _handle_unexpected_exception(exc: Exception):  # pragma: no cover - behaviou
 @document_operation(
     "/pages/tree",
     "get",
+    flavors=("read",),
     summary="Retrieve the page hierarchy",
     description=(
         "Returns a nested representation of the Confluence page tree starting from the "
@@ -202,6 +203,7 @@ def api_get_page_tree(endpoint_name: str):
 @document_operation(
     "/pages/{title}/children",
     "get",
+    flavors=("read",),
     summary="List direct child pages",
     parameters=[
         {
@@ -254,6 +256,7 @@ def api_list_children(endpoint_name: str, title: str):
 @document_operation(
     "/pages/{title}/parent",
     "get",
+    flavors=("read",),
     summary="Retrieve parent page metadata",
     parameters=[
         {
@@ -302,6 +305,7 @@ def api_get_parent(endpoint_name: str, title: str):
 @document_operation(
     "/pages",
     "get",
+    flavors=("read",),
     summary="List subpages of the root page",
     description=(
         "Returns the titles of all pages that are direct children of the configured "
@@ -339,6 +343,7 @@ def api_list_subpages(endpoint_name: str):  # pragma: no cover - exercised via t
 @document_operation(
     "/pages/{title}",
     "get",
+    flavors=("read",),
     summary="Read content of a page by title",
     description=(
         "Returns the content of a Confluence page identified by title (must be a "
@@ -404,6 +409,7 @@ def api_read_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages",
     "post",
+    flavors=("upload",),
     summary="Create a new page within the hierarchy",
     description=(
         "Creates a new Confluence page beneath the configured root or a specified parent. "
@@ -482,6 +488,7 @@ def api_create_page(endpoint_name: str):
 @document_operation(
     "/pages/{title}/move",
     "post",
+    flavors=(),
     summary="Move a page under a new parent",
     description="Re-parents an existing page to a new ancestor within the same space.",
     operationId="movePage",
@@ -555,6 +562,7 @@ def api_move_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages/{title}",
     "put",
+    flavors=(),
     summary="Update content of a page by title",
     description=(
         "Updates the full content of a Confluence page identified by title. Only "
@@ -636,6 +644,7 @@ def api_update_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages/{title}",
     "delete",
+    flavors=(),
     summary="Delete a page by title",
     description=(
         "Deletes a Confluence page identified by title. Only pages under the "
@@ -694,6 +703,7 @@ def api_delete_page(endpoint_name: str, title: str):
 @document_operation(
     "/pages/rename",
     "post",
+    flavors=(),
     summary="Rename a page by title",
     description=(
         "Renames a page by changing its title. The page must be a direct child of "
@@ -770,6 +780,7 @@ def api_rename_page(endpoint_name: str):
 @document_operation(
     "/openapi.json",
     "get",
+    flavors=("always",),
     summary="Get OpenAPI schema",
     description="Returns this OpenAPI schema document.",
     operationId="getOpenAPISchema",
@@ -795,6 +806,7 @@ def openapi_schema(endpoint_name: str):
 @document_operation(
     "/health",
     "get",
+    flavors=("always",),
     summary="Health check",
     description="Check whether API server is live. No authentication required.",
     operationId="healthCheck",
