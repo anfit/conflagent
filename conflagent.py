@@ -827,13 +827,13 @@ def api_health(endpoint_name: str):
 
 
 @app.route("/openapi.json", methods=["GET"])
-def openapi_schema_summary(endpoint_name: str):
+def openapi_schema_summary():
     spec = generate_openapi_spec("<endpoint_name>", request.host_url, app)
     return jsonify(spec)
 
 
 @app.route("/health", methods=["GET"])
-def api_global_health(endpoint_name: str):
+def api_global_health():
     return _success("Service healthy.", data={"status": "ok"})
 
 if __name__ == "__main__":  # pragma: no cover - manual execution only
