@@ -784,7 +784,6 @@ def api_rename_page(endpoint_name: str):
     summary="Get OpenAPI schema",
     description="Returns this OpenAPI schema document.",
     operationId="getOpenAPISchema",
-    security=BEARER_SECURITY_REQUIREMENT,
     responses={
         "200": {
             "description": "OpenAPI JSON returned",
@@ -797,7 +796,6 @@ def api_rename_page(endpoint_name: str):
     },
 )
 def openapi_schema(endpoint_name: str):
-    check_auth()
     spec = generate_openapi_spec(endpoint_name, request.host_url, app)
     return jsonify(spec)
 
@@ -810,7 +808,6 @@ def openapi_schema(endpoint_name: str):
     summary="Health check",
     description="Check whether API server is live. No authentication required.",
     operationId="healthCheck",
-    security=BEARER_SECURITY_REQUIREMENT,
     responses={
         "200": {
             "description": "Server is running",
@@ -834,7 +831,6 @@ def openapi_schema(endpoint_name: str):
     },
 )
 def api_health(endpoint_name: str):
-    check_auth()
     return _success("Service healthy.", data={"status": "ok"})
 
 
