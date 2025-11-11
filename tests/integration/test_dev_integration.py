@@ -363,7 +363,7 @@ def test_endpoint_health_reports_ok(dev_config: Dict[str, str]):
 @pytest.mark.integration
 def test_health_reports_ok(dev_config: Dict[str, str]):
     response = requests.get(
-        _full_url(dev_config, "/health"),
+        f"{dev_config['base_url']}{'/health'}",
         timeout=10,
     )
     # The health endpoint is intentionally unauthenticated so that external
@@ -412,7 +412,7 @@ def test_missing_page_returns_404(dev_config: Dict[str, str]):
 @pytest.mark.integration
 def test_endpoint_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
     response = requests.get(
-        f"{dev_config['base_url']}/{'/openapi.json'}",
+        _full_url(dev_config, "/openapi.json"),
         headers=_auth_headers(dev_config["token"]),
         timeout=10,
     )
@@ -427,7 +427,7 @@ def test_endpoint_openapi_schema_includes_endpoint_server(dev_config: Dict[str, 
 @pytest.mark.integration
 def test_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
     response = requests.get(
-        _full_url(dev_config, "/openapi.json"),
+        f"{dev_config['base_url']}/{'/openapi.json'}",
         timeout=10,
     )
     # The openapi endpoint is intentionally unauthenticated so that external
