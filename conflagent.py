@@ -407,7 +407,7 @@ def api_read_page(endpoint_name: str, title: str):
     summary="Create a new page within the hierarchy",
     description=(
         "Creates a new Confluence page beneath the configured root or a specified parent. "
-        "Title must be unique amongst siblings. Body may contain Markdown — it will be "
+        "Title must be unique. Body may contain Markdown — it will be "
         "converted to Confluence storage format automatically."
     ),
     operationId="createPage",
