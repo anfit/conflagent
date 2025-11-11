@@ -43,6 +43,13 @@ def load_config(endpoint_name: str) -> Dict[str, Any]:
         if key not in config:
             abort(500, description=f"Missing required config key '{key}' in {path}")
 
+    raw_flavor = config.get("flavor", "default")
+    if isinstance(raw_flavor, str):
+        flavor = raw_flavor.strip() or "default"
+    else:
+        flavor = "default"
+    config["flavor"] = flavor.lower()
+
     CONFIG_CACHE[endpoint_name] = config
     return config
 
