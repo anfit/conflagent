@@ -346,7 +346,7 @@ def hierarchy_titles(dev_config: Dict[str, str]) -> HierarchyTitles:
 
 
 @pytest.mark.integration
-def test_health_endpoint_reports_ok(dev_config: Dict[str, str]):
+def test_endpoint_health_reports_ok(dev_config: Dict[str, str]):
     response = requests.get(
         _full_url(dev_config, "/health"),
         headers=_auth_headers(dev_config["token"]),
@@ -361,13 +361,18 @@ def test_health_endpoint_reports_ok(dev_config: Dict[str, str]):
 
 
 @pytest.mark.integration
-def test_health_requires_bearer_token(dev_config: Dict[str, str]):
-    response = requests.get(_full_url(dev_config, "/health"), timeout=10)
+def test_health_reports_ok(dev_config: Dict[str, str]):
+    response = requests.get(
+        f"{dev_config['base_url']}{'/health'}",
+        timeout=10,
+    )
     # The health endpoint is intentionally unauthenticated so that external
     # monitors can ping it without embedding secrets. Verify it still responds
     # successfully and exposes no sensitive payload even without the bearer
     # token.
     assert response.status_code == 200
+    content_type = response.headers.get("Content-Type", "")
+    assert "application/json" in content_type
     payload = response.json()
     assert payload.get("success") is True
     assert payload.get("data") == {"status": "ok"}
@@ -405,7 +410,7 @@ def test_missing_page_returns_404(dev_config: Dict[str, str]):
 
 
 @pytest.mark.integration
-def test_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
+def test_endpoint_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
     response = requests.get(
         _full_url(dev_config, "/openapi.json"),
         headers=_auth_headers(dev_config["token"]),
@@ -416,6 +421,24 @@ def test_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
     assert "servers" in payload
     server_urls = {server.get("url") for server in payload["servers"]}
     expected_prefix = f"/endpoint/{dev_config['endpoint']}"
+    assert any(url.endswith(expected_prefix) for url in server_urls if isinstance(url, str))
+
+
+@pytest.mark.integration
+def test_openapi_schema_includes_endpoint_server(dev_config: Dict[str, str]):
+    response = requests.get(
+        f"{dev_config['base_url']}/{'/openapi.json'}",
+        timeout=10,
+    )
+    # The openapi endpoint is intentionally unauthenticated so that external
+    # users can browse available apis. Verify it still responds
+    # successfully and exposes no sensitive payload even without the bearer
+    # token.
+    assert response.status_code == 200
+    payload = response.json()
+    assert "servers" in payload
+    server_urls = {server.get("url") for server in payload["servers"]}
+    expected_prefix = "/endpoint/<endpoint_name>"
     assert any(url.endswith(expected_prefix) for url in server_urls if isinstance(url, str))
 
 

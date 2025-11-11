@@ -773,6 +773,7 @@ def api_rename_page(endpoint_name: str):
     summary="Get OpenAPI schema",
     description="Returns this OpenAPI schema document.",
     operationId="getOpenAPISchema",
+    security=BEARER_SECURITY_REQUIREMENT,
     responses={
         "200": {
             "description": "OpenAPI JSON returned",
@@ -785,9 +786,9 @@ def api_rename_page(endpoint_name: str):
     },
 )
 def openapi_schema(endpoint_name: str):
+    check_auth()
     spec = generate_openapi_spec(endpoint_name, request.host_url, app)
     return jsonify(spec)
-
 
 @app.route("/endpoint/<endpoint_name>/health", methods=["GET"])
 @with_config
@@ -797,6 +798,7 @@ def openapi_schema(endpoint_name: str):
     summary="Health check",
     description="Check whether API server is live. No authentication required.",
     operationId="healthCheck",
+    security=BEARER_SECURITY_REQUIREMENT,
     responses={
         "200": {
             "description": "Server is running",
@@ -820,8 +822,19 @@ def openapi_schema(endpoint_name: str):
     },
 )
 def api_health(endpoint_name: str):
+    check_auth()
     return _success("Service healthy.", data={"status": "ok"})
 
+
+@app.route("/openapi.json", methods=["GET"])
+def openapi_schema_summary():
+    spec = generate_openapi_spec("<endpoint_name>", request.host_url, app)
+    return jsonify(spec)
+
+
+@app.route("/health", methods=["GET"])
+def api_global_health():
+    return _success("Service healthy.", data={"status": "ok"})
 
 if __name__ == "__main__":  # pragma: no cover - manual execution only
     app.run(host="0.0.0.0", port=5000)
