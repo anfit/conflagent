@@ -27,8 +27,15 @@
   background: linear-gradient(135deg, var(--primary), #27408b);
   color: #fff;
   padding: 4rem 0;
-  text-align: center;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.landing__hero-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  align-items: center;
+  text-align: center;
 }
 
 .landing__hero-title {
@@ -37,7 +44,7 @@
 }
 
 .landing__hero-subtitle {
-  margin: 0 0 1.5rem;
+  margin: 0;
   font-size: 1.2rem;
 }
 
@@ -49,13 +56,16 @@
   border-radius: 999px;
   text-decoration: none;
   font-weight: 600;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
 .landing__hero-cta:hover,
 .landing__hero-cta:focus {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+  background: #ffb65c;
 }
 
 .landing__main {
@@ -72,6 +82,96 @@
 
 .landing__section-body {
   margin: 0;
+}
+
+.landing__section--apis {
+  overflow-x: auto;
+}
+
+.landing__api-table-wrapper {
+  margin-top: 1.25rem;
+}
+
+.landing__api-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(17, 27, 46, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.landing__api-table thead {
+  background: #e8edfb;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+}
+
+.landing__api-table th,
+.landing__api-table td {
+  padding: 0.85rem 1rem;
+  text-align: left;
+}
+
+.landing__api-table tbody tr:nth-child(odd) {
+  background: #f8faff;
+}
+
+.landing__api-table tbody tr:nth-child(even) {
+  background: #fff;
+}
+
+.landing__api-table td[data-label]::before {
+  content: attr(data-label) ': ';
+  font-weight: 600;
+  display: none;
+  margin-right: 0.25rem;
+}
+
+.landing__api-loading,
+.landing__api-error {
+  margin: 1rem 0 0;
+}
+
+@media (max-width: 600px) {
+  .landing__api-table thead {
+    display: none;
+  }
+
+  .landing__api-table,
+  .landing__api-table tbody,
+  .landing__api-table tr,
+  .landing__api-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .landing__api-table tr {
+    border-bottom: 1px solid #e4e9f7;
+    padding: 0.75rem 0;
+  }
+
+  .landing__api-table td {
+    padding: 0.35rem 0;
+  }
+
+  .landing__api-table td[data-label]::before {
+    display: inline;
+  }
+}
+
+@media (min-width: 640px) {
+  .landing__hero-inner {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    text-align: left;
+  }
+
+  .landing__hero-copy {
+    max-width: 32rem;
+  }
 }
 
 .landing__feature-list {
