@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from flask import Flask, abort, g, jsonify, render_template, request
+from flask import Flask, Response, abort, g, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
 from conflagent_core.auth import check_auth
@@ -17,9 +18,38 @@ from conflagent_core.openapi import (
     generate_openapi_spec,
 )
 from conflagent_core.response import error_response, success_response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 
 app = Flask(__name__)
+
+
+_PROMETHEUS_REGISTRY = CollectorRegistry()
+_HTTP_REQUESTS_TOTAL = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ("method", "route", "status"),
+    registry=_PROMETHEUS_REGISTRY,
+)
+_HTTP_REQUEST_DURATION_SECONDS = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ("method", "route"),
+    registry=_PROMETHEUS_REGISTRY,
+)
+_HTTP_REQUESTS_IN_PROGRESS = Gauge(
+    "http_requests_in_progress",
+    "HTTP requests currently being processed",
+    ("route",),
+    registry=_PROMETHEUS_REGISTRY,
+)
 
 
 def _load_build_properties() -> Dict[str, str]:
@@ -54,6 +84,45 @@ _ERROR_CODE_BY_STATUS: Dict[int, str] = {
     422: "INVALID_OPERATION",
     500: "INTERNAL_ERROR",
 }
+
+
+def _metrics_route_label() -> str:
+    if request.url_rule is not None and request.url_rule.rule:
+        return request.url_rule.rule
+    return request.path or "unknown"
+
+
+@app.before_request
+def _track_request_start():
+    route_label = _metrics_route_label()
+    g._metrics_route = route_label
+    g._metrics_start_time = time.perf_counter()
+    _HTTP_REQUESTS_IN_PROGRESS.labels(route=route_label).inc()
+    g._metrics_in_progress = True
+
+
+@app.after_request
+def _track_request_end(response):
+    route_label = getattr(g, "_metrics_route", _metrics_route_label())
+    if getattr(g, "_metrics_in_progress", False):
+        _HTTP_REQUESTS_IN_PROGRESS.labels(route=route_label).dec()
+    duration_start = getattr(g, "_metrics_start_time", None)
+    if duration_start is not None:
+        duration = time.perf_counter() - duration_start
+        _HTTP_REQUEST_DURATION_SECONDS.labels(
+            method=request.method, route=route_label
+        ).observe(duration)
+    _HTTP_REQUESTS_TOTAL.labels(
+        method=request.method,
+        route=route_label,
+        status=str(response.status_code),
+    ).inc()
+    return response
+
+
+@app.route("/metrics", methods=["GET"])
+def metrics():
+    return Response(generate_latest(_PROMETHEUS_REGISTRY), mimetype=CONTENT_TYPE_LATEST)
 
 
 @app.route("/", methods=["GET"])
