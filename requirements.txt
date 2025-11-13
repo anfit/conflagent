@@ -3,3 +3,4 @@ requests
 pytest
 apispec
 markdown2
+prometheus_client
